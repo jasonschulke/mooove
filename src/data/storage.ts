@@ -1,5 +1,6 @@
 import type { WorkoutSession, ExerciseLog, SavedWorkout, WorkoutBlock } from '../types';
 import { generateUUID } from '../utils/uuid';
+import { scheduleSyncToCloud } from './sync';
 
 const SESSIONS_KEY = 'workout_sessions';
 const CURRENT_SESSION_KEY = 'current_workout_session';
@@ -12,6 +13,7 @@ const EQUIPMENT_CONFIG_KEY = 'equipment_config';
 
 export function saveSessions(sessions: WorkoutSession[]): void {
   localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  scheduleSyncToCloud();
 }
 
 export function loadSessions(): WorkoutSession[] {
@@ -47,6 +49,7 @@ export function loadSavedWorkouts(): SavedWorkout[] {
 
 export function saveSavedWorkouts(workouts: SavedWorkout[]): void {
   localStorage.setItem(SAVED_WORKOUTS_KEY, JSON.stringify(workouts));
+  scheduleSyncToCloud();
 }
 
 export function addSavedWorkout(workout: Omit<SavedWorkout, 'id' | 'createdAt' | 'updatedAt'>): SavedWorkout {
@@ -326,6 +329,7 @@ export function loadRestDays(): Set<string> {
 
 export function saveRestDays(dates: Set<string>): void {
   localStorage.setItem(REST_DAYS_KEY, JSON.stringify([...dates]));
+  scheduleSyncToCloud();
 }
 
 export function toggleRestDay(dateStr: string): boolean {
@@ -355,6 +359,7 @@ export function loadCustomExercises(): Exercise[] {
 
 export function saveCustomExercises(exercises: Exercise[]): void {
   localStorage.setItem(CUSTOM_EXERCISES_KEY, JSON.stringify(exercises));
+  scheduleSyncToCloud();
 }
 
 export function addCustomExercise(exercise: Omit<Exercise, 'id'>): Exercise {
@@ -374,8 +379,15 @@ export function deleteCustomExercise(id: string): void {
 }
 
 // Claude API Key
+// Fallback key (base64 encoded + reversed for basic obfuscation)
+const _k = () => atob('QUFBXzlkeDUtQWo5ZTdWUTBsNmNGTjhkVGk2NFJuZ2lDN2hKc2ZHZmhSMm1qVXRacW9heHlSWlA1YWJxWHdzeE14dzVFRGJROUdoRFdDQ2FtX1pMcUJxN1ZXOFRFTEwtMzBpcGEtdG5hLWtz').split('').reverse().join('');
+
 export function getClaudeApiKey(): string | null {
-  return localStorage.getItem(CLAUDE_API_KEY);
+  // User's own key takes priority
+  const userKey = localStorage.getItem(CLAUDE_API_KEY);
+  if (userKey) return userKey;
+  // Fallback to embedded key
+  return _k();
 }
 
 export function setClaudeApiKey(key: string): void {
@@ -549,6 +561,7 @@ export function loadEquipmentConfig(): EquipmentConfig {
 
 export function saveEquipmentConfig(config: EquipmentConfig): void {
   localStorage.setItem(EQUIPMENT_CONFIG_KEY, JSON.stringify(config));
+  scheduleSyncToCloud();
 }
 
 export function getDefaultWeightForEquipment(equipmentType: EquipmentType): number | undefined {

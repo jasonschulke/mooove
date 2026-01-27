@@ -291,7 +291,7 @@ export function HomePage() {
       {/* Yearly Contribution Grid */}
       <section className="px-4 mb-6">
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">2026</h2>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">This Year</h2>
           <span className="text-xs text-slate-500">Year Overview</span>
         </div>
         <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto scrollbar-hide">

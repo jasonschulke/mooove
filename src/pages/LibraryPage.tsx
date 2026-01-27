@@ -809,10 +809,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
       <header className="px-4 pt-16 pb-4 safe-top">
         <div className="flex items-center gap-3">
           <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Library</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Workouts & exercises</p>
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Library</h1>
         </div>
       </header>
 

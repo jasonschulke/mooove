@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { WorkoutBlock, EffortLevel } from './types';
 import { useWorkout } from './hooks/useWorkout';
 import { seedDefaultWorkouts } from './data/storage';
+import { initSync } from './data/sync';
 import { NavBar } from './components/NavBar';
 import { WorkoutBuilder } from './components/WorkoutBuilder';
 import { WorkoutStartFlow } from './components/WorkoutStartFlow';
@@ -10,6 +11,9 @@ import { HomePage } from './pages/HomePage';
 import { WorkoutPage } from './pages/WorkoutPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { Onboarding } from './components/Onboarding';
+
+const ONBOARDING_KEY = 'workout_onboarding_complete';
 
 type Page = 'home' | 'workout' | 'library' | 'chat' | 'settings';
 type Theme = 'dark' | 'light';
@@ -17,15 +21,30 @@ type Theme = 'dark' | 'light';
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [showBuilder, setShowBuilder] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem(ONBOARDING_KEY);
+  });
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('workout_theme');
     return (saved as Theme) || 'dark';
   });
   const workout = useWorkout();
 
+  // Splash screen timeout
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Seed default workouts on first load
   useEffect(() => {
     seedDefaultWorkouts();
+  }, []);
+
+  // Initialize cloud sync - restore data if local is empty
+  useEffect(() => {
+    initSync();
   }, []);
 
   // Apply theme
@@ -78,6 +97,29 @@ function App() {
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem(ONBOARDING_KEY, 'true');
+    setShowOnboarding(false);
+  };
+
+  // Show splash screen
+  if (showSplash) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <img
+          src="/logo_icon_wordmark.png"
+          alt="Moove"
+          className="h-16 animate-pulse"
+        />
+      </div>
+    );
+  }
+
+  // Show onboarding for new users
+  if (showOnboarding) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
 
   // Show workout builder
   if (showBuilder) {
