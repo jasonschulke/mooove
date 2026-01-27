@@ -50,7 +50,7 @@ export function WorkoutStartFlow({
   };
 
   return (
-    <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top">
+    <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top bg-slate-100 dark:bg-slate-950">
       <header className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Start Workout</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">Choose how to begin</p>

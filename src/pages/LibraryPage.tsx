@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import type { SavedWorkout, WorkoutBlock, Exercise, MuscleArea } from '../types';
 import { loadSavedWorkouts, deleteSavedWorkout, addSavedWorkout, updateSavedWorkout, loadCustomExercises, deleteCustomExercise, getLastWeekAverages } from '../data/storage';
-import { getAllExercises } from '../data/exercises';
+import { getAllExercises, getExerciseById } from '../data/exercises';
 import { Button } from '../components/Button';
 import { WorkoutBuilder } from '../components/WorkoutBuilder';
 
@@ -43,6 +43,71 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   const [customExercises, setCustomExercises] = useState(() => loadCustomExercises());
   const [showExerciseDeleteConfirm, setShowExerciseDeleteConfirm] = useState<string | null>(null);
 
+  // Inline editing state
+  const [addingToBlock, setAddingToBlock] = useState<number | null>(null);
+  const [addingToSet, setAddingToSet] = useState<number | null>(null);
+  const [exerciseSearch, setExerciseSearch] = useState('');
+
+  // Drag and drop state
+  const [draggedItem, setDraggedItem] = useState<{ blockIdx: number; exerciseIdx: number } | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<{ blockIdx: number; exerciseIdx: number } | null>(null);
+
+  // Swipe to delete state
+  const [swipingExercise, setSwipingExercise] = useState<{ blockIdx: number; exerciseIdx: number } | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const swipeStartX = useRef(0);
+  const swipeThreshold = 80;
+
+  // Swipe handlers
+  const handleTouchStart = (e: React.TouchEvent, blockIdx: number, exerciseIdx: number) => {
+    swipeStartX.current = e.touches[0].clientX;
+    setSwipingExercise({ blockIdx, exerciseIdx });
+    setSwipeOffset(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swipingExercise) return;
+    const diff = swipeStartX.current - e.touches[0].clientX;
+    setSwipeOffset(Math.max(0, Math.min(diff, 120)));
+  };
+
+  const handleTouchEnd = () => {
+    if (!swipingExercise) return;
+    if (swipeOffset >= swipeThreshold) {
+      removeExerciseFromBlock(swipingExercise.blockIdx, swipingExercise.exerciseIdx);
+    }
+    setSwipingExercise(null);
+    setSwipeOffset(0);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (blockIdx: number, exerciseIdx: number) => {
+    setDraggedItem({ blockIdx, exerciseIdx });
+  };
+
+  const handleDragOver = (e: React.DragEvent, blockIdx: number, exerciseIdx: number) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.blockIdx === blockIdx) {
+      setDragOverItem({ blockIdx, exerciseIdx });
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (draggedItem && dragOverItem && draggedItem.blockIdx === dragOverItem.blockIdx) {
+      if (draggedItem.exerciseIdx !== dragOverItem.exerciseIdx && savingBlocks) {
+        const newBlocks = [...savingBlocks];
+        const block = newBlocks[draggedItem.blockIdx];
+        const exercises = [...block.exercises];
+        const [removed] = exercises.splice(draggedItem.exerciseIdx, 1);
+        exercises.splice(dragOverItem.exerciseIdx, 0, removed);
+        newBlocks[draggedItem.blockIdx] = { ...block, exercises };
+        setSavingBlocks(newBlocks);
+      }
+    }
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
+
   const exercises = useMemo(() => getAllExercises(), [customExercises]);
 
   const refreshWorkouts = () => {
@@ -53,12 +118,166 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
     setCustomExercises(loadCustomExercises());
   };
 
+  // Inline editing helpers
+  const removeExerciseFromBlock = (blockIdx: number, exerciseIdx: number) => {
+    if (!savingBlocks) return;
+    const newBlocks = [...savingBlocks];
+    newBlocks[blockIdx] = {
+      ...newBlocks[blockIdx],
+      exercises: newBlocks[blockIdx].exercises.filter((_, i) => i !== exerciseIdx),
+    };
+    // Remove empty blocks
+    setSavingBlocks(newBlocks.filter(b => b.exercises.length > 0));
+  };
+
+  const addExerciseToBlock = (blockIdx: number, exerciseId: string, setNum?: number) => {
+    if (!savingBlocks) return;
+    const exercise = getExerciseById(exerciseId);
+    if (!exercise) return;
+    const newBlocks = [...savingBlocks];
+    const newExercise = {
+      exerciseId,
+      weight: exercise.defaultWeight,
+      reps: exercise.defaultReps,
+      duration: exercise.defaultDuration,
+      sets: setNum,
+    };
+    newBlocks[blockIdx] = {
+      ...newBlocks[blockIdx],
+      exercises: [...newBlocks[blockIdx].exercises, newExercise],
+    };
+    setSavingBlocks(newBlocks);
+    // Keep menu open for quick multi-select, just clear search
+    setExerciseSearch('');
+  };
+
+  const copyToNextSet = (blockIdx: number, exerciseId: string, currentSetNum: number) => {
+    if (!savingBlocks) return;
+    const block = savingBlocks[blockIdx];
+    // Find max set number in this block
+    const maxSet = Math.max(...block.exercises.map(e => e.sets || 1), 1);
+    const nextSetNum = currentSetNum + 1;
+    // Only copy if there's a next set (max 3 for strength)
+    if (nextSetNum > Math.max(maxSet, 3)) return;
+
+    const exercise = getExerciseById(exerciseId);
+    if (!exercise) return;
+
+    // Check if exercise already exists in next set
+    const alreadyInNextSet = block.exercises.some(
+      e => e.exerciseId === exerciseId && e.sets === nextSetNum
+    );
+    if (alreadyInNextSet) return;
+
+    const newBlocks = [...savingBlocks];
+    const newExercise = {
+      exerciseId,
+      weight: exercise.defaultWeight,
+      reps: exercise.defaultReps,
+      duration: exercise.defaultDuration,
+      sets: nextSetNum,
+    };
+    newBlocks[blockIdx] = {
+      ...newBlocks[blockIdx],
+      exercises: [...newBlocks[blockIdx].exercises, newExercise],
+    };
+    setSavingBlocks(newBlocks);
+  };
+
+  // Map block types to allowed movement areas
+  const getBlockAreas = (blockType: string): MuscleArea[] => {
+    switch (blockType) {
+      case 'warmup':
+        return ['warmup', 'core', 'full-body'];
+      case 'strength':
+        return ['squat', 'hinge', 'press', 'push', 'pull'];
+      case 'conditioning':
+        return ['conditioning', 'core'];
+      case 'cooldown':
+        return ['warmup', 'core', 'cooldown'];
+      default:
+        return [];
+    }
+  };
+
+  const filteredExercisesForAdding = useMemo(() => {
+    if (addingToBlock === null || !savingBlocks) return [];
+    const block = savingBlocks[addingToBlock];
+    const existingIds = new Set(block.exercises.map(e => e.exerciseId));
+    const allowedAreas = getBlockAreas(block.type);
+    return exercises.filter(e => {
+      if (existingIds.has(e.id)) return false;
+      if (allowedAreas.length > 0 && !allowedAreas.includes(e.area)) return false;
+      if (!exerciseSearch) return true;
+      return e.name.toLowerCase().includes(exerciseSearch.toLowerCase());
+    }).slice(0, 10);
+  }, [addingToBlock, savingBlocks, exercises, exerciseSearch]);
+
   const getExerciseCount = (blocks: WorkoutBlock[]) => {
     return blocks.reduce((acc, b) => acc + b.exercises.length, 0);
   };
 
   const getBlockSummary = (blocks: WorkoutBlock[]) => {
     return blocks.map(b => `${b.name} (${b.exercises.length})`).join(', ');
+  };
+
+  // Block type icons
+  const getBlockIcon = (type: string) => {
+    switch (type) {
+      case 'warmup':
+        return (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+          </svg>
+        );
+      case 'strength':
+        return (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h2l2-3v6l-2-3H3zm18 0h-2l-2-3v6l2-3h2zm-9-4a2 2 0 100 4 2 2 0 000-4zm-4 2h2m4 0h2" />
+          </svg>
+        );
+      case 'conditioning':
+        return (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        );
+      case 'cooldown':
+        return (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Movement area colors
+  const getAreaColor = (area: string) => {
+    switch (area) {
+      case 'squat':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
+      case 'hinge':
+        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300';
+      case 'press':
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+      case 'push':
+        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300';
+      case 'pull':
+        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+      case 'core':
+        return 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300';
+      case 'conditioning':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+      case 'warmup':
+        return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300';
+      case 'cooldown':
+        return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300';
+      default:
+        return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
+    }
   };
 
   const handleCreateNew = () => {
@@ -167,45 +386,235 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
         </header>
 
         <div className="space-y-6 flex-1">
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-            <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">Preview</div>
-            <div className="text-slate-800 dark:text-slate-200">
-              {getExerciseCount(savingBlocks)} exercises in {savingBlocks.length} blocks
+          {/* Name and Time - inline */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Workout Name</label>
+              <input
+                type="text"
+                value={workoutName}
+                onChange={e => setWorkoutName(e.target.value)}
+                placeholder="e.g., Full Body Strength"
+                className="w-full px-4 py-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-base text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-shadow"
+              />
             </div>
-            <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {getBlockSummary(savingBlocks)}
+            <div className="w-24">
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Time</label>
+              <input
+                type="number"
+                value={estimatedMinutes}
+                onChange={e => setEstimatedMinutes(e.target.value)}
+                placeholder="min"
+                className="w-full px-3 py-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-base text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-shadow text-center"
+              />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">Workout Name</label>
-            <input
-              type="text"
-              value={workoutName}
-              onChange={e => setWorkoutName(e.target.value)}
-              placeholder="e.g., Full Body Strength"
-              className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-            />
+          {/* Exercise List by Block with Inline Editing */}
+          <div className="space-y-4">
+            {savingBlocks.map((block, blockIdx) => {
+              // Group exercises by set number
+              const setGroups = new Map<number, { ex: typeof block.exercises[0]; originalIdx: number }[]>();
+              block.exercises.forEach((ex, idx) => {
+                const setNum = ex.sets || 1;
+                if (!setGroups.has(setNum)) setGroups.set(setNum, []);
+                setGroups.get(setNum)!.push({ ex, originalIdx: idx });
+              });
+              const sortedSets = Array.from(setGroups.entries()).sort((a, b) => a[0] - b[0]);
+              const isAddingHere = addingToBlock === blockIdx;
+
+              return (
+                <div key={blockIdx} className="rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                  {/* Block Header */}
+                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800 dark:to-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {getBlockIcon(block.type)}
+                        </span>
+                        <h3 className="font-semibold text-slate-900 dark:text-slate-100">{block.name}</h3>
+                      </div>
+                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+                        {block.exercises.length} exercise{block.exercises.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Exercises - Always show with set grouping */}
+                  <div className="p-4 space-y-5">
+                    {sortedSets.map(([setNum, exerciseItems]) => (
+                      <div key={setNum} className={`rounded-xl ${sortedSets.length > 1 ? 'bg-slate-50/50 dark:bg-slate-900/30 p-3' : ''}`}>
+                        {/* Set with vertical bar */}
+                        <div className="flex">
+                          {/* Vertical bar column */}
+                          <div className="flex flex-col items-center mr-3">
+                            <div className="w-1.5 h-6 rounded-full bg-emerald-500 shrink-0" />
+                            <div className="w-1.5 flex-1 rounded-full bg-emerald-200 dark:bg-emerald-800" />
+                          </div>
+
+                          {/* Content column */}
+                          <div className="flex-1 min-w-0">
+                            {/* Set Header */}
+                            <div className="flex items-center justify-between mb-3 h-6">
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                                Set {setNum}
+                              </span>
+                              {!(isAddingHere && addingToSet === setNum) && (
+                                <button
+                                  onClick={() => {
+                                    setAddingToBlock(blockIdx);
+                                    setAddingToSet(setNum);
+                                    setExerciseSearch('');
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  Add
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Exercise List */}
+                            <div className="space-y-1">
+                          {exerciseItems.map(({ ex, originalIdx }) => {
+                            const exercise = getExerciseById(ex.exerciseId);
+                            const areaLabel = exercise?.area ? exercise.area.charAt(0).toUpperCase() + exercise.area.slice(1) : '';
+                            const areaColorClass = exercise?.area ? getAreaColor(exercise.area) : '';
+                            const isBeingDragged = draggedItem?.blockIdx === blockIdx && draggedItem?.exerciseIdx === originalIdx;
+                            const isDragOver = dragOverItem?.blockIdx === blockIdx && dragOverItem?.exerciseIdx === originalIdx;
+                            const isSwiping = swipingExercise?.blockIdx === blockIdx && swipingExercise?.exerciseIdx === originalIdx;
+                            const currentSwipeOffset = isSwiping ? swipeOffset : 0;
+
+                            return (
+                              <div
+                                key={originalIdx}
+                                className={`relative overflow-hidden rounded-lg ${isDragOver ? 'ring-2 ring-emerald-400' : ''}`}
+                              >
+                                {/* Delete background */}
+                                <div className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-end pr-4">
+                                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </div>
+
+                                {/* Exercise card */}
+                                <div
+                                  draggable
+                                  onDragStart={() => handleDragStart(blockIdx, originalIdx)}
+                                  onDragOver={(e) => handleDragOver(e, blockIdx, originalIdx)}
+                                  onDragEnd={handleDragEnd}
+                                  onTouchStart={(e) => handleTouchStart(e, blockIdx, originalIdx)}
+                                  onTouchMove={handleTouchMove}
+                                  onTouchEnd={handleTouchEnd}
+                                  className={`relative flex items-center gap-3 p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm cursor-grab active:cursor-grabbing transition-all ${
+                                    isBeingDragged ? 'opacity-50 scale-95' : ''
+                                  }`}
+                                  style={{ transform: `translateX(-${currentSwipeOffset}px)` }}
+                                >
+                                  {/* Movement type badge - colored */}
+                                  {areaLabel && (
+                                    <span className={`shrink-0 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md ${areaColorClass}`}>
+                                      {areaLabel}
+                                    </span>
+                                  )}
+                                  <span className="flex-1 min-w-0 text-base font-medium text-slate-700 dark:text-slate-200 truncate">
+                                    {exercise?.name || ex.exerciseId}
+                                  </span>
+                                  <span className="shrink-0 text-sm text-slate-400 dark:text-slate-500 tabular-nums">
+                                    {ex.reps && `${ex.reps} reps`}
+                                    {ex.duration && `${ex.duration}s`}
+                                    {ex.weight && ` @ ${ex.weight}lb`}
+                                  </span>
+                                  {/* Copy to next set - only for strength block and not last set */}
+                                  {block.type === 'strength' && setNum < 3 && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyToNextSet(blockIdx, ex.exerciseId, setNum);
+                                      }}
+                                      className="shrink-0 p-1.5 text-slate-400 hover:text-emerald-500 dark:text-slate-500 dark:hover:text-emerald-400 transition-colors"
+                                      title="Copy to next set"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                  {/* Drag handle - far right */}
+                                  <div className="shrink-0 text-slate-300 dark:text-slate-600">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Add exercise inline */}
+                          {isAddingHere && addingToSet === setNum && (
+                            <div className="mt-3 p-4 -ml-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
+                              <div className="relative">
+                                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                  type="text"
+                                  value={exerciseSearch}
+                                  onChange={e => setExerciseSearch(e.target.value)}
+                                  placeholder="Search exercises..."
+                                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-base text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-shadow"
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="mt-3 max-h-64 overflow-y-auto space-y-1">
+                                {filteredExercisesForAdding.map(ex => {
+                                  const areaLabel = ex.area.charAt(0).toUpperCase() + ex.area.slice(1);
+                                  const areaColorClass = getAreaColor(ex.area);
+                                  return (
+                                    <button
+                                      key={ex.id}
+                                      onClick={() => addExerciseToBlock(blockIdx, ex.id, setNum)}
+                                      className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                    >
+                                      <span className={`shrink-0 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-lg ${areaColorClass}`}>
+                                        {areaLabel}
+                                      </span>
+                                      <span className="text-base font-medium text-slate-700 dark:text-slate-200">{ex.name}</span>
+                                    </button>
+                                  );
+                                })}
+                                {filteredExercisesForAdding.length === 0 && (
+                                  <div className="py-4 text-center text-sm text-slate-400">No exercises found</div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => { setAddingToBlock(null); setAddingToSet(null); }}
+                                className="mt-3 w-full py-2.5 text-sm font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div>
-            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">
-              Estimated Time (minutes, optional)
-            </label>
-            <input
-              type="number"
-              value={estimatedMinutes}
-              onChange={e => setEstimatedMinutes(e.target.value)}
-              placeholder="e.g., 45"
-              className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
+          {/* Full builder link for major changes */}
           <button
             onClick={() => setShowBuilder(true)}
-            className="w-full p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            className="w-full py-2 text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400 transition-colors"
           >
-            Edit exercises
+            Open full workout builder
           </button>
         </div>
 
@@ -380,6 +789,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       <header className="px-4 pt-16 pb-4 safe-top">
+        <img src="/logo_icon_wordmark.png" alt="Moove" className="h-12 dark:invert mb-4" />
         <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Library</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">Workouts & exercises</p>
       </header>
@@ -435,15 +845,15 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {workouts.map(workout => (
                 <div
                   key={workout.id}
-                  className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none"
+                  className="p-5 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm"
                 >
                   {showDeleteConfirm === workout.id ? (
-                    <div className="text-center">
-                      <p className="text-slate-800 dark:text-slate-200 mb-4">Delete "{workout.name}"?</p>
+                    <div className="text-center py-2">
+                      <p className="text-lg text-slate-800 dark:text-slate-200 mb-4">Delete "{workout.name}"?</p>
                       <div className="flex gap-3">
                         <Button
                           variant="secondary"
@@ -463,25 +873,27 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <div className="font-semibold text-slate-900 dark:text-slate-100">{workout.name}</div>
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{workout.name}</h3>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {getBlockSummary(workout.blocks)}
+                          </p>
+                          <div className="flex items-center gap-2 mt-3 flex-wrap">
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
                               {getExerciseCount(workout.blocks)} exercises
                             </span>
                             {workout.estimatedMinutes && (
-                              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium">
+                              <span className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium">
                                 ~{workout.estimatedMinutes} min
                               </span>
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-3">
                         <Button
                           variant="primary"
-                          size="sm"
                           onClick={() => onStartWorkout(workout.blocks)}
                           className="flex-1"
                         >
@@ -489,14 +901,13 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                         </Button>
                         <Button
                           variant="secondary"
-                          size="sm"
                           onClick={() => handleEditWorkout(workout)}
                         >
                           Edit
                         </Button>
                         <button
                           onClick={() => setShowDeleteConfirm(workout.id)}
-                          className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                          className="p-2.5 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-all"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

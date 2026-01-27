@@ -161,6 +161,7 @@ export function ExercisesPage() {
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       <header className="px-4 pt-16 pb-4 safe-top">
+        <img src="/logo_icon_wordmark.png" alt="Moove" className="h-12 dark:invert mb-4" />
         <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Exercises</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">{exercises.length} exercises</p>
       </header>

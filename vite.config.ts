@@ -9,10 +9,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['logo_icon.png', 'logo_icon_wordmark.png'],
       manifest: {
-        name: 'Workout Tracker',
-        short_name: 'Workout',
+        name: 'Moove',
+        short_name: 'Moove',
         description: 'Personal workout tracking app',
         theme_color: '#0f172a',
         background_color: '#0f172a',
@@ -20,17 +20,12 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
+            src: 'logo_icon.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'logo_icon.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
