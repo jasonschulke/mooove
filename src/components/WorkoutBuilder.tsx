@@ -284,19 +284,23 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
   return (
     <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top bg-slate-100 dark:bg-slate-950">
       <header className="mb-6">
-        <button
-          onClick={onCancel}
-          className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-4"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Build Workout</h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          Add exercises to each block
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Build Workout</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Add exercises to each block</p>
+            </div>
+          </div>
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div className="space-y-4 flex-1">
@@ -407,7 +411,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                   >
                                     {/* Movement type badge - colored */}
                                     {areaLabel && (
-                                      <span className={`shrink-0 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md ${areaColorClass}`}>
+                                      <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${areaColorClass}`}>
                                         {areaLabel}
                                       </span>
                                     )}
@@ -470,7 +474,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                         onClick={() => addExercise(blockConfig.type, setNum, ex.id)}
                                         className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                       >
-                                        <span className={`shrink-0 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md ${areaColorClass}`}>
+                                        <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${areaColorClass}`}>
                                           {areaLabel}
                                         </span>
                                         <span className="text-base font-medium text-slate-700 dark:text-slate-200">{ex.name}</span>

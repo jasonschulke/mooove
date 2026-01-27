@@ -16,6 +16,8 @@ interface ExerciseViewProps {
   }) => void;
   onSkip: () => void;
   onSwapExercise: (newExerciseId: string) => void;
+  onBack?: () => void;
+  canGoBack?: boolean;
 }
 
 export function ExerciseView({
@@ -23,6 +25,8 @@ export function ExerciseView({
   onComplete,
   onSkip,
   onSwapExercise,
+  onBack,
+  canGoBack = false,
 }: ExerciseViewProps) {
   const exercise = getExerciseById(workoutExercise.exerciseId);
   const lastWeekAvg = exercise ? getLastWeekAverages(exercise.id) : null;
@@ -167,22 +171,28 @@ export function ExerciseView({
         {/* Weight & Reps Input - Compact */}
         {!duration && (
           <div className="grid grid-cols-2 gap-3 mb-4">
-            {exercise.equipment !== 'bodyweight' && (
-              <div>
-                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Weight</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={weight || ''}
-                    onChange={e => setWeight(e.target.value ? Number(e.target.value) : undefined)}
-                    className="w-full px-3 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-lg font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors"
-                    placeholder="—"
-                  />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">lb</span>
-                </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Weight</label>
+              <div className="relative">
+                {exercise.equipment === 'bodyweight' ? (
+                  <div className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-base font-medium text-center">
+                    Bodyweight
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      value={weight || ''}
+                      onChange={e => setWeight(e.target.value ? Number(e.target.value) : undefined)}
+                      className="w-full px-3 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-lg font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors"
+                      placeholder="—"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">lb</span>
+                  </>
+                )}
               </div>
-            )}
-            <div className={exercise.equipment === 'bodyweight' ? 'col-span-2' : ''}>
+            </div>
+            <div>
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Reps</label>
               <input
                 type={reps === 'AMRAP' ? 'text' : 'number'}
@@ -234,6 +244,18 @@ export function ExerciseView({
       {/* Footer Actions */}
       <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-800">
         <div className="flex gap-3">
+          {/* Back button */}
+          {canGoBack && onBack && (
+            <button
+              onClick={onBack}
+              className="py-3.5 px-4 rounded-xl transition-colors bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400"
+              title="Previous exercise"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => setShowTimer(!showTimer)}
             className={`py-3.5 px-4 rounded-xl transition-colors ${

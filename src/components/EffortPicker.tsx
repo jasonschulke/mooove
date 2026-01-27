@@ -120,7 +120,7 @@ export function EffortPicker({ value, onChange }: EffortPickerProps) {
       {/* Skip link */}
       <button
         onClick={() => onChange(undefined)}
-        className="w-full text-center text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors py-2"
+        className="w-full text-center text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 underline transition-colors py-3"
       >
         Skip rating
       </button>

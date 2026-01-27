@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { getWorkoutStats, getThisWeekWorkoutDates, getYearlyContributions, loadRestDays, toggleYearDayStatus, hasWorkoutOnDate, hasRealWorkoutOnDate, addBacklogWorkout, getEffortHistory } from '../data/storage';
+import { getWorkoutStats, getThisWeekWorkoutDates, getYearlyContributions, loadRestDays, toggleYearDayStatus, hasWorkoutOnDate, hasRealWorkoutOnDate, addBacklogWorkout, getEffortHistory, backfillEffortScores } from '../data/storage';
 import { EffortChart } from '../components/EffortChart';
 
 export function HomePage() {
@@ -17,6 +17,9 @@ export function HomePage() {
         addBacklogWorkout(dateStr);
       }
     });
+
+    // Backfill effort scores for workouts that don't have them
+    backfillEffortScores();
 
     setStats(getWorkoutStats());
     setThisWeekDates(getThisWeekWorkoutDates());
@@ -153,11 +156,39 @@ export function HomePage() {
     return maxDay.count > 0 ? days[maxDay.day] : '--';
   }, [stats.workoutsByDay]);
 
+  const handleRefresh = () => {
+    window.location.reload();
+  };
+
+  const todayDate = today.getDate();
+
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       {/* Header */}
       <header className="px-4 pt-16 pb-4 safe-top">
-        <img src="/logo_icon_wordmark.png" alt="Moove" className="h-12 dark:invert" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Home</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Refresh button */}
+            <button
+              onClick={handleRefresh}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+              title="Refresh"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            {/* Calendar icon with today's date inside */}
+            <div className="flex flex-col w-9 h-9 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+              <div className="h-2 bg-emerald-500" />
+              <span className="flex-1 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">{todayDate}</span>
+            </div>
+          </div>
+        </div>
       </header>
 
       {/* Streak Banner */}

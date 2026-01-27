@@ -103,6 +103,7 @@ function App() {
             currentExerciseIndex={workout.currentExerciseIndex}
             onLogExercise={workout.logExercise}
             onNextExercise={workout.nextExercise}
+            onPreviousExercise={workout.previousExercise}
             onCompleteWorkout={handleCompleteWorkout}
             onCancelWorkout={handleCancelWorkout}
             onStartWorkout={() => setShowBuilder(true)}

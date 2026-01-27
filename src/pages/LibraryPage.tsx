@@ -56,28 +56,42 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   const [swipingExercise, setSwipingExercise] = useState<{ blockIdx: number; exerciseIdx: number } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeStartX = useRef(0);
+  const swipeStartY = useRef(0);
   const swipeThreshold = 80;
+  const swipeActive = useRef(false);
 
   // Swipe handlers
   const handleTouchStart = (e: React.TouchEvent, blockIdx: number, exerciseIdx: number) => {
     swipeStartX.current = e.touches[0].clientX;
+    swipeStartY.current = e.touches[0].clientY;
     setSwipingExercise({ blockIdx, exerciseIdx });
     setSwipeOffset(0);
+    swipeActive.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!swipingExercise) return;
-    const diff = swipeStartX.current - e.touches[0].clientX;
-    setSwipeOffset(Math.max(0, Math.min(diff, 120)));
+    const diffX = swipeStartX.current - e.touches[0].clientX;
+    const diffY = Math.abs(e.touches[0].clientY - swipeStartY.current);
+
+    // Only activate swipe if horizontal movement is dominant (2:1 ratio)
+    if (!swipeActive.current && Math.abs(diffX) > 10) {
+      swipeActive.current = diffX > diffY * 2;
+    }
+
+    if (swipeActive.current) {
+      setSwipeOffset(Math.max(0, Math.min(diffX, 120)));
+    }
   };
 
   const handleTouchEnd = () => {
     if (!swipingExercise) return;
-    if (swipeOffset >= swipeThreshold) {
+    if (swipeActive.current && swipeOffset >= swipeThreshold) {
       removeExerciseFromBlock(swipingExercise.blockIdx, swipingExercise.exerciseIdx);
     }
     setSwipingExercise(null);
     setSwipeOffset(0);
+    swipeActive.current = false;
   };
 
   // Drag and drop handlers
@@ -368,21 +382,25 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
     return (
       <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top bg-slate-100 dark:bg-slate-950">
         <header className="mb-6">
-          <button
-            onClick={() => {
-              setSavingBlocks(null);
-              setEditingWorkout(null);
-            }}
-            className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-4"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {editingWorkout ? 'Edit Workout' : 'Save Workout'}
-          </h1>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                {editingWorkout ? 'Edit Workout' : 'Save Workout'}
+              </h1>
+            </div>
+            <button
+              onClick={() => {
+                setSavingBlocks(null);
+                setEditingWorkout(null);
+              }}
+              className="flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <div className="space-y-6 flex-1">
@@ -515,7 +533,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                                 >
                                   {/* Movement type badge - colored */}
                                   {areaLabel && (
-                                    <span className={`shrink-0 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md ${areaColorClass}`}>
+                                    <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${areaColorClass}`}>
                                       {areaLabel}
                                     </span>
                                   )}
@@ -579,7 +597,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                                       onClick={() => addExerciseToBlock(blockIdx, ex.id, setNum)}
                                       className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                     >
-                                      <span className={`shrink-0 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-lg ${areaColorClass}`}>
+                                      <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${areaColorClass}`}>
                                         {areaLabel}
                                       </span>
                                       <span className="text-base font-medium text-slate-700 dark:text-slate-200">{ex.name}</span>
@@ -789,9 +807,13 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       <header className="px-4 pt-16 pb-4 safe-top">
-        <img src="/logo_icon_wordmark.png" alt="Moove" className="h-12 dark:invert mb-4" />
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Library</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">Workouts & exercises</p>
+        <div className="flex items-center gap-3">
+          <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Library</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Workouts & exercises</p>
+          </div>
+        </div>
       </header>
 
       {/* Tabs */}

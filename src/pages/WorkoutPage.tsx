@@ -16,6 +16,7 @@ interface WorkoutPageProps {
     duration?: number;
   }) => void;
   onNextExercise: (totalInBlock: number, totalBlocks: number) => void;
+  onPreviousExercise: (getBlockExerciseCount: (index: number) => number) => void;
   onCompleteWorkout: (effort?: EffortLevel) => void;
   onCancelWorkout: () => void;
   onStartWorkout: () => void;
@@ -27,6 +28,7 @@ export function WorkoutPage({
   currentExerciseIndex,
   onLogExercise,
   onNextExercise,
+  onPreviousExercise,
   onCompleteWorkout,
   onCancelWorkout,
   onStartWorkout,
@@ -226,12 +228,12 @@ export function WorkoutPage({
     );
   }
 
-  // Show cancel confirmation
+  // Show end workout confirmation
   if (showCancelConfirm) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-24 bg-slate-100 dark:bg-slate-950">
         <div className="text-center max-w-sm p-6 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-          <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">Cancel Workout?</h2>
+          <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">End Workout?</h2>
           <p className="text-slate-500 dark:text-slate-400 mb-6">
             Your progress ({session.exercises.length} exercises) will be lost.
           </p>
@@ -240,7 +242,7 @@ export function WorkoutPage({
               Keep Going
             </Button>
             <Button variant="danger" onClick={onCancelWorkout} className="flex-1">
-              Cancel
+              End
             </Button>
           </div>
         </div>
@@ -292,6 +294,13 @@ export function WorkoutPage({
     setSwappedExercises(prev => ({ ...prev, [swapKey]: newExerciseId }));
   };
 
+  const handleBack = () => {
+    const getBlockExerciseCount = (idx: number) => blocks[idx]?.exercises.length ?? 0;
+    onPreviousExercise(getBlockExerciseCount);
+  };
+
+  const isFirstExercise = currentBlockIndex === 0 && currentExerciseIndex === 0;
+
   return (
     <div className="min-h-screen flex flex-col pb-20 bg-slate-100 dark:bg-slate-950">
       {/* Top Header */}
@@ -305,21 +314,7 @@ export function WorkoutPage({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <div className="text-center">
-            <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-              {currentBlock.name}
-              {hasMultipleSets && currentSetNumber && (
-                <span className="font-normal text-slate-600 dark:text-slate-400"> – Set {currentSetNumber} of {totalSetsInBlock}</span>
-              )}
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {hasMultipleSets && currentSetNumber ? (
-                <>Exercise {exerciseIndexInSet} of {exercisesInCurrentSet.length} • {formatElapsedTime(elapsedTime)}</>
-              ) : (
-                <>{currentExerciseIndex + 1} of {currentBlock.exercises.length} • {formatElapsedTime(elapsedTime)}</>
-              )}
-            </div>
-          </div>
+          <img src="/logo_icon.png" alt="Moove" className="h-8 dark:invert" />
           <button
             onClick={() => setShowComplete(true)}
             className="px-3 py-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg text-sm font-medium"
@@ -363,13 +358,21 @@ export function WorkoutPage({
                 <div className="text-sm text-slate-500 dark:text-slate-400">Set {currentSetNumber} of {totalSetsInBlock}</div>
               )}
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                {hasMultipleSets && currentSetNumber
-                  ? `${exerciseIndexInSet}/${exercisesInCurrentSet.length}`
-                  : `${currentExerciseIndex + 1}/${currentBlock.exercises.length}`}
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-lg font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
+                  {formatElapsedTime(elapsedTime)}
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">elapsed</div>
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">exercises</div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {hasMultipleSets && currentSetNumber
+                    ? `${exerciseIndexInSet}/${exercisesInCurrentSet.length}`
+                    : `${currentExerciseIndex + 1}/${currentBlock.exercises.length}`}
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">exercises</div>
+              </div>
             </div>
           </div>
         </div>
@@ -385,6 +388,8 @@ export function WorkoutPage({
               onComplete={handleComplete}
               onSkip={handleSkip}
               onSwapExercise={handleSwap}
+              onBack={handleBack}
+              canGoBack={!isFirstExercise}
             />
           </div>
         </div>
