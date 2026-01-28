@@ -188,7 +188,7 @@ export function HomePage() {
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{greeting}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Ready to moove your bones?</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Ready to moove?</p>
           </div>
           <div className="flex items-center gap-2">
             {/* Refresh button */}
