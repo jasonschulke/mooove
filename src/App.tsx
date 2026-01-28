@@ -112,6 +112,7 @@ function App() {
           alt="Moove"
           className="h-32 animate-pulse"
         />
+        <p className="mt-4 text-slate-500 text-sm font-medium tracking-wide">Moove your Bones</p>
       </div>
     );
   }
