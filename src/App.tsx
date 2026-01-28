@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import type { WorkoutBlock, EffortLevel } from './types';
 import { useWorkout } from './hooks/useWorkout';
 import { seedDefaultWorkouts } from './data/storage';
-import { initSync } from './data/sync';
+// Cloud sync auto-restore disabled - see comment in useEffect below
+// import { initSync } from './data/sync';
 import { NavBar } from './components/NavBar';
 import { WorkoutBuilder } from './components/WorkoutBuilder';
 import { WorkoutStartFlow } from './components/WorkoutStartFlow';
@@ -42,10 +43,9 @@ function App() {
     seedDefaultWorkouts();
   }, []);
 
-  // Initialize cloud sync - restore data if local is empty
-  useEffect(() => {
-    initSync();
-  }, []);
+  // Cloud sync disabled for auto-restore to prevent data sharing between users
+  // Data still syncs TO cloud on changes (see scheduleSyncToCloud calls)
+  // useEffect(() => { initSync(); }, []);
 
   // Apply theme
   useEffect(() => {
@@ -106,12 +106,13 @@ function App() {
   // Show splash screen
   if (showSplash) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100">
         <img
           src="/logo_icon_wordmark.png"
           alt="Moove"
           className="h-16 animate-pulse"
         />
+        <p className="mt-3 text-slate-500 text-sm font-medium tracking-wide">Moove your Bones</p>
       </div>
     );
   }
