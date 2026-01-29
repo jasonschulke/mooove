@@ -24,6 +24,7 @@ import { WorkoutPage } from './pages/WorkoutPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { Onboarding } from './components/Onboarding';
+import { UpdatePrompt } from './components/UpdatePrompt';
 
 const ONBOARDING_KEY = 'workout_onboarding_complete';
 
@@ -226,6 +227,7 @@ function App() {
     <AuthProvider>
       <SignUpPromptProvider>
         <AppContent />
+        <UpdatePrompt />
       </SignUpPromptProvider>
     </AuthProvider>
   );
