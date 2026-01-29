@@ -32,12 +32,10 @@ const COW_MESSAGES: Record<PersonalityType, string[]> = {
     'Peace through movement.',
     'Energy well spent.',
   ],
-  trump: [
-    'TREMENDOUS! The best workout, maybe ever!',
-    'Nobody - and I mean NOBODY - finishes like you!',
-    'That was HUGE! People are saying it!',
-    'Fantastic! Your gains will be YUGE!',
-    'You did it BIGLY! Very impressive!',
+  flirty: [
+    'You look amazing when you work out!',
+    'Wow, that was hot!',
+    'Same time tomorrow? I\'ll be waiting.',
   ],
 };
 

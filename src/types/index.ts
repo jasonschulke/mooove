@@ -170,16 +170,16 @@ export interface WorkoutState {
 // ============================================================================
 
 /** Personality types for the AI coach / greeting messages */
-export type PersonalityType = 'neutral' | 'sarcastic' | 'encouraging' | 'drill-sergeant' | 'zen' | 'trump';
+export type PersonalityType = 'neutral' | 'sarcastic' | 'encouraging' | 'drill-sergeant' | 'zen' | 'flirty';
 
 /** Available personality options with descriptions */
 export const PERSONALITY_OPTIONS: { value: PersonalityType; label: string; description: string }[] = [
   { value: 'zen', label: 'Zen', description: 'Calm and mindful' },
   { value: 'encouraging', label: 'Encouraging', description: 'Supportive and motivating' },
+  { value: 'flirty', label: 'Flirty', description: 'Playful and charming' },
   { value: 'neutral', label: 'Neutral', description: 'Straightforward and professional' },
   { value: 'sarcastic', label: 'Sarcastic', description: 'Witty with playful sarcasm' },
   { value: 'drill-sergeant', label: 'Drill Sergeant', description: 'Tough love and discipline' },
-  { value: 'trump', label: 'Trump', description: 'Make your workouts great again' },
 ];
 
 /** RPE scale descriptions for the effort picker UI */

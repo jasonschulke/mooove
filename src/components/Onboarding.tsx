@@ -228,7 +228,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         ) : (
           <div className="flex gap-3">
-            {!isLast && (
+            {!isLast && !isWelcomeStep && (
               <button
                 onClick={handleSkip}
                 disabled={isLoading}
@@ -239,8 +239,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             )}
             <button
               onClick={handleNext}
-              disabled={isLoading}
-              className={`${isLast ? 'flex-1' : 'flex-[2]'} py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
+              disabled={isLoading || (isWelcomeStep && !userName.trim())}
+              className={`${isLast || isWelcomeStep ? 'flex-1' : 'flex-[2]'} py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
             >
               {isLoading ? (
                 <>

@@ -36,10 +36,10 @@ function getTimeBasedGreeting(name: string | null, personality: PersonalityType)
       afternoon: [`Center yourself this afternoon, ${displayName}.`, `The afternoon brings balance, ${displayName}.`],
       evening: [`Find your evening calm, ${displayName}.`, `As the day ends, strength begins, ${displayName}.`],
     },
-    trump: {
-      morning: [`Good morning, ${displayName}! Today's workout? HUGE. The best.`, `Rise and shine, ${displayName}! Nobody - and I mean NOBODY - works out like you!`, `${displayName}! Ready to make these gains GREAT AGAIN?`],
-      afternoon: [`${displayName}, you're doing tremendous work! Tremendous!`, `Believe me, ${displayName}, this workout will be FANTASTIC. People are saying it!`, `Afternoon, ${displayName}! Your muscles? Very impressive. Everyone's talking about them.`],
-      evening: [`Evening, ${displayName}! We're gonna finish BIGLY!`, `${displayName}, your evening workout will be the greatest workout in the history of workouts, maybe ever!`, `Look, ${displayName}, I know workouts. And yours? Incredible. Just incredible.`],
+    flirty: {
+      morning: [`Good morning, gorgeous! Ready to get sweaty, ${displayName}?`, `Hey ${displayName}, looking good! Let's make those muscles jealous.`],
+      afternoon: [`Hey there, ${displayName}. Come here often?`, `Afternoon, ${displayName}. Those gains are looking good on you.`],
+      evening: [`Evening, ${displayName}. You, me, and some weights?`, `Hey ${displayName}, let's end the day right together.`],
     },
   };
 
