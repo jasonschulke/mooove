@@ -1,16 +1,49 @@
+/**
+ * useWorkout Hook - Manages active workout session state
+ *
+ * Handles starting, navigating, and completing workouts.
+ * Persists session state to localStorage for crash recovery.
+ */
+
 import { useState, useCallback, useEffect } from 'react';
 import type { WorkoutSession, WorkoutBlock, ExerciseLog, EffortLevel } from '../types';
 import { saveCurrentSession, loadCurrentSession, addCompletedSession } from '../data/storage';
 import { generateUUID } from '../utils/uuid';
 
-export function useWorkout() {
-  const [session, setSession] = useState<WorkoutSession | null>(() => loadCurrentSession());
-  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+/** Extended session interface with navigation state for persistence */
+interface ExtendedSession extends WorkoutSession {
+  currentBlockIndex?: number;
+  currentExerciseIndex?: number;
+  swappedExercises?: Record<string, string>;
+}
 
+export function useWorkout() {
+  const [session, setSession] = useState<ExtendedSession | null>(() => {
+    const loaded = loadCurrentSession() as ExtendedSession | null;
+    return loaded;
+  });
+  const [currentBlockIndex, setCurrentBlockIndex] = useState(() => {
+    const loaded = loadCurrentSession() as ExtendedSession | null;
+    return loaded?.currentBlockIndex ?? 0;
+  });
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(() => {
+    const loaded = loadCurrentSession() as ExtendedSession | null;
+    return loaded?.currentExerciseIndex ?? 0;
+  });
+
+  // Save session with navigation state
   useEffect(() => {
-    saveCurrentSession(session);
-  }, [session]);
+    if (session) {
+      const extendedSession: ExtendedSession = {
+        ...session,
+        currentBlockIndex,
+        currentExerciseIndex,
+      };
+      saveCurrentSession(extendedSession);
+    } else {
+      saveCurrentSession(null);
+    }
+  }, [session, currentBlockIndex, currentExerciseIndex]);
 
   const startWorkoutWithBlocks = useCallback((blocks: WorkoutBlock[]) => {
     const newSession: WorkoutSession = {
@@ -81,6 +114,22 @@ export function useWorkout() {
     saveCurrentSession(null);
   }, []);
 
+  // Update swapped exercises in session for persistence
+  const updateSwappedExercises = useCallback((swapped: Record<string, string>) => {
+    setSession(prev => prev ? {
+      ...prev,
+      swappedExercises: swapped,
+    } : null);
+  }, []);
+
+  // Update session blocks (for mid-workout editing)
+  const updateSessionBlocks = useCallback((blocks: WorkoutBlock[]) => {
+    setSession(prev => prev ? {
+      ...prev,
+      blocks,
+    } : null);
+  }, []);
+
   return {
     session,
     currentBlockIndex,
@@ -93,5 +142,7 @@ export function useWorkout() {
     cancelWorkout,
     setCurrentBlockIndex,
     setCurrentExerciseIndex,
+    updateSwappedExercises,
+    updateSessionBlocks,
   };
 }

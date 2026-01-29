@@ -6,9 +6,18 @@ import {
   loadCustomExercises,
   deleteCustomExercise,
   clearChatHistory,
+  loadPersonality,
+  savePersonality,
+  loadUserName,
+  saveUserName,
+  exportAllDataAsJSON,
+  exportWorkoutsAsCSV,
+  exportExerciseLogsAsCSV,
 } from '../data/storage';
+import { getDeviceId } from '../data/sync';
 import { Button } from '../components/Button';
-import type { Exercise } from '../types';
+import type { Exercise, PersonalityType } from '../types';
+import { PERSONALITY_OPTIONS } from '../types';
 
 interface SettingsPageProps {
   theme: 'dark' | 'light';
@@ -21,11 +30,36 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
   const [showKey, setShowKey] = useState(false);
   const [customExercises, setCustomExercises] = useState<Exercise[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [personality, setPersonality] = useState<PersonalityType>('neutral');
+  const [userName, setUserName] = useState<string>('');
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const deviceId = getDeviceId();
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  };
 
   useEffect(() => {
     setSavedKey(getClaudeApiKey());
     setCustomExercises(loadCustomExercises());
+    setPersonality(loadPersonality());
+    setUserName(loadUserName() || '');
   }, []);
+
+  const handleNameChange = (name: string) => {
+    setUserName(name);
+    saveUserName(name);
+  };
+
+  const handlePersonalityChange = (newPersonality: PersonalityType) => {
+    setPersonality(newPersonality);
+    savePersonality(newPersonality);
+  };
 
   const handleSaveKey = () => {
     if (apiKey.trim()) {
@@ -51,18 +85,72 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
     clearChatHistory();
   };
 
+  const handleExportJSON = () => {
+    const data = exportAllDataAsJSON();
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `moove-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportWorkoutsCSV = () => {
+    const data = exportWorkoutsAsCSV();
+    const blob = new Blob([data], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `moove-workouts-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportExerciseLogsCSV = () => {
+    const data = exportExerciseLogsAsCSV();
+    const blob = new Blob([data], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `moove-exercise-logs-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const maskedKey = savedKey ? `sk-ant-...${savedKey.slice(-8)}` : null;
 
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       <header className="px-4 pt-16 pb-4 safe-top">
-        <div className="flex items-center gap-3">
-          <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Settings</h1>
+        <div className="flex items-center gap-2">
+          <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+          <img src="/settings.svg" alt="Settings" className="h-5 dark:invert" />
         </div>
       </header>
 
       <div className="px-4 space-y-6">
+        {/* Profile Section */}
+        <section className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Profile</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+            Your name for personalized greetings.
+          </p>
+          <input
+            type="text"
+            value={userName}
+            onChange={e => handleNameChange(e.target.value)}
+            placeholder="Enter your name"
+            className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+          />
+        </section>
+
         {/* Appearance Section */}
         <section className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Appearance</h2>
@@ -72,14 +160,14 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
           <div className="flex gap-3">
             <button
               onClick={() => theme === 'dark' && onToggleTheme()}
-              className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+              className={`flex-1 p-3 rounded-lg border-2 transition-all ${
                 theme === 'light'
                   ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                   : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <div className="flex flex-col items-center gap-2">
-                <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
                 <span className={`text-sm font-medium ${theme === 'light' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>
@@ -89,14 +177,14 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
             </button>
             <button
               onClick={() => theme === 'light' && onToggleTheme()}
-              className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+              className={`flex-1 p-3 rounded-lg border-2 transition-all ${
                 theme === 'dark'
                   ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                   : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <div className="flex flex-col items-center gap-2">
-                <svg className="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                 </svg>
                 <span className={`text-sm font-medium ${theme === 'dark' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>
@@ -107,13 +195,52 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
           </div>
         </section>
 
-        {/* Claude API Key Section */}
+        {/* Personality Section */}
         <section className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Claude API Key</h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Personality</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-            Required for the Claude assistant to add exercises and answer questions.
+            Choose how the app talks to you.
           </p>
+          <div className="space-y-2">
+            {PERSONALITY_OPTIONS.map(option => (
+              <button
+                key={option.value}
+                onClick={() => handlePersonalityChange(option.value)}
+                className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
+                  personality === option.value
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
+              >
+                <div className={`font-medium ${personality === option.value ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                  {option.label}
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {option.description}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
 
+        {/* Claude API Key Section - Collapsible */}
+        <section className="rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none overflow-hidden">
+          <button
+            onClick={() => toggleSection('apiKey')}
+            className="w-full p-4 flex items-center justify-between text-left"
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Claude API Key</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {savedKey ? 'API key configured' : 'Required for Claude assistant'}
+              </p>
+            </div>
+            <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedSections.has('apiKey') ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expandedSections.has('apiKey') && (
+            <div className="px-4 pb-4">
           {savedKey ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-100 dark:bg-slate-700/50">
@@ -167,6 +294,8 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
                   console.anthropic.com
                 </a>
               </p>
+            </div>
+          )}
             </div>
           )}
         </section>
@@ -226,30 +355,103 @@ export function SettingsPage({ theme, onToggleTheme }: SettingsPageProps) {
           )}
         </section>
 
-        {/* Chat History Section */}
-        <section className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Chat History</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-            Clear your conversation history with the Claude assistant.
-          </p>
-          <Button variant="ghost" onClick={handleClearChat} className="w-full">
-            Clear Chat History
-          </Button>
+        {/* Chat History Section - Collapsible */}
+        <section className="rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none overflow-hidden">
+          <button
+            onClick={() => toggleSection('chatHistory')}
+            className="w-full p-4 flex items-center justify-between text-left"
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Chat History</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Clear conversation history</p>
+            </div>
+            <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedSections.has('chatHistory') ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expandedSections.has('chatHistory') && (
+            <div className="px-4 pb-4">
+              <Button variant="ghost" onClick={handleClearChat} className="w-full">
+                Clear Chat History
+              </Button>
+            </div>
+          )}
         </section>
 
-        {/* App Info */}
-        <section className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">About</h2>
-          <div className="space-y-2 text-sm text-slate-500 dark:text-slate-400">
-            <div className="flex justify-between">
-              <span>Version</span>
-              <span className="text-slate-700 dark:text-slate-300">1.0.0</span>
+        {/* Data Export - Collapsible */}
+        <section className="rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none overflow-hidden">
+          <button
+            onClick={() => toggleSection('exportData')}
+            className="w-full p-4 flex items-center justify-between text-left"
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Export Data</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Download workout data</p>
             </div>
-            <div className="flex justify-between">
-              <span>Storage</span>
-              <span className="text-slate-700 dark:text-slate-300">localStorage</span>
+            <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedSections.has('exportData') ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expandedSections.has('exportData') && (
+            <div className="px-4 pb-4 space-y-2">
+              <Button variant="secondary" onClick={handleExportJSON} className="w-full">
+                <div className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export All Data (JSON)
+                </div>
+              </Button>
+              <Button variant="secondary" onClick={handleExportWorkoutsCSV} className="w-full">
+                <div className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export Workouts (CSV)
+                </div>
+              </Button>
+              <Button variant="secondary" onClick={handleExportExerciseLogsCSV} className="w-full">
+                <div className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export Exercise Logs (CSV)
+                </div>
+              </Button>
             </div>
-          </div>
+          )}
+        </section>
+
+        {/* App Info - Collapsible */}
+        <section className="rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none overflow-hidden">
+          <button
+            onClick={() => toggleSection('about')}
+            className="w-full p-4 flex items-center justify-between text-left"
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">About</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Version 1.0.0</p>
+            </div>
+            <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedSections.has('about') ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expandedSections.has('about') && (
+            <div className="px-4 pb-4 space-y-2 text-sm text-slate-500 dark:text-slate-400">
+              <div className="flex justify-between">
+                <span>Version</span>
+                <span className="text-slate-700 dark:text-slate-300">1.0.0</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Storage</span>
+                <span className="text-slate-700 dark:text-slate-300">localStorage</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Device ID</span>
+                <span className="text-slate-700 dark:text-slate-300 font-mono text-xs">{deviceId}</span>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </div>

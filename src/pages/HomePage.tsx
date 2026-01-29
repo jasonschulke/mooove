@@ -1,28 +1,68 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { getWorkoutStats, getThisWeekWorkoutDates, getYearlyContributions, loadRestDays, toggleYearDayStatus, hasWorkoutOnDate, hasRealWorkoutOnDate, addBacklogWorkout, getEffortHistory, backfillEffortScores, loadUserName } from '../data/storage';
+import { getWorkoutStats, getThisWeekWorkoutDates, getYearlyContributions, loadRestDays, toggleYearDayStatus, hasWorkoutOnDate, hasRealWorkoutOnDate, addBacklogWorkout, getEffortHistory, backfillEffortScores, loadUserName, loadPersonality, getMostSkippedExercises, getSessionsByDate, getMostUsedExercises } from '../data/storage';
 import { EffortChart } from '../components/EffortChart';
+import { getExerciseById } from '../data/exercises';
+import type { PersonalityType, WorkoutSession } from '../types';
 
-function getTimeBasedGreeting(name: string | null): string {
+function getTimeBasedGreeting(name: string | null, personality: PersonalityType): string {
   const hour = new Date().getHours();
   const displayName = name || 'there';
+  const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
-  if (hour < 12) {
-    return `Mornin', ${displayName}.`;
-  } else if (hour < 17) {
-    return `Afternoon, ${displayName}.`;
-  } else {
-    return `Evenin', ${displayName}.`;
-  }
+  const greetings: Record<PersonalityType, Record<string, string[]>> = {
+    neutral: {
+      morning: [`Mornin', ${displayName}.`, `Good morning, ${displayName}.`],
+      afternoon: [`Afternoon, ${displayName}.`, `Good afternoon, ${displayName}.`],
+      evening: [`Evenin', ${displayName}.`, `Good evening, ${displayName}.`],
+    },
+    sarcastic: {
+      morning: [`Oh look who finally woke up, ${displayName}.`, `Rise and grind, ${displayName}. Or just rise, whatever.`],
+      afternoon: [`Afternoon, ${displayName}. Missing morning workouts again?`, `Well well, ${displayName} decided to show up.`],
+      evening: [`Evening workout? Bold choice, ${displayName}.`, `Late night gains, ${displayName}? Respect.`],
+    },
+    encouraging: {
+      morning: [`Good morning, ${displayName}! Today is YOUR day!`, `Rise and shine, ${displayName}! You've got this!`],
+      afternoon: [`Hey ${displayName}! Keep that momentum going!`, `Afternoon, ${displayName}! You're doing amazing!`],
+      evening: [`Evening, ${displayName}! Great job showing up today!`, `Hey ${displayName}! Finishing the day strong!`],
+    },
+    'drill-sergeant': {
+      morning: [`DROP AND GIVE ME 20, ${displayName.toUpperCase()}!`, `RISE AND GRIND, ${displayName.toUpperCase()}! NO EXCUSES!`],
+      afternoon: [`${displayName.toUpperCase()}! TIME TO PUT IN WORK!`, `AFTERNOON MEANS NOTHING! WORK HARDER, ${displayName.toUpperCase()}!`],
+      evening: [`LAST CHANCE TODAY, ${displayName.toUpperCase()}! MAKE IT COUNT!`, `EVENING WARRIOR ${displayName.toUpperCase()} REPORTING FOR DUTY!`],
+    },
+    zen: {
+      morning: [`Breathe in the morning energy, ${displayName}.`, `A peaceful morning awaits you, ${displayName}.`],
+      afternoon: [`Center yourself this afternoon, ${displayName}.`, `The afternoon brings balance, ${displayName}.`],
+      evening: [`Find your evening calm, ${displayName}.`, `As the day ends, strength begins, ${displayName}.`],
+    },
+    trump: {
+      morning: [`Good morning, ${displayName}! Today's workout? HUGE. The best.`, `Rise and shine, ${displayName}! Nobody - and I mean NOBODY - works out like you!`, `${displayName}! Ready to make these gains GREAT AGAIN?`],
+      afternoon: [`${displayName}, you're doing tremendous work! Tremendous!`, `Believe me, ${displayName}, this workout will be FANTASTIC. People are saying it!`, `Afternoon, ${displayName}! Your muscles? Very impressive. Everyone's talking about them.`],
+      evening: [`Evening, ${displayName}! We're gonna finish BIGLY!`, `${displayName}, your evening workout will be the greatest workout in the history of workouts, maybe ever!`, `Look, ${displayName}, I know workouts. And yours? Incredible. Just incredible.`],
+    },
+  };
+
+  const options = greetings[personality][timeOfDay];
+  return options[Math.floor(Math.random() * options.length)];
 }
 
 export function HomePage() {
   const [stats, setStats] = useState(() => getWorkoutStats());
-  const [thisWeekDates, setThisWeekDates] = useState(() => getThisWeekWorkoutDates());
+  const [, setThisWeekDates] = useState(() => getThisWeekWorkoutDates());
   const [yearlyData, setYearlyData] = useState(() => getYearlyContributions());
   const [restDays, setRestDays] = useState(() => loadRestDays());
   const [effortHistory, setEffortHistory] = useState(() => getEffortHistory());
   const [userName] = useState(() => loadUserName());
-  const greeting = getTimeBasedGreeting(userName);
+  const [personality] = useState(() => loadPersonality());
+  const [mostSkipped, setMostSkipped] = useState(() => getMostSkippedExercises(5));
+  const [mostUsedExercises, setMostUsedExercises] = useState(() => getMostUsedExercises(5));
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDateWorkouts, setSelectedDateWorkouts] = useState<WorkoutSession[]>([]);
+  const [exerciseTab, setExerciseTab] = useState<'used' | 'skipped'>('used');
+  const greeting = getTimeBasedGreeting(userName, personality);
+
+  // Get current date string for memo dependencies (ensures calendar updates daily)
+  const currentDateStr = new Date().toLocaleDateString();
 
   useEffect(() => {
     // Add backlog workouts for specified dates (only if not already present)
@@ -41,70 +81,113 @@ export function HomePage() {
     setYearlyData(getYearlyContributions());
     setRestDays(loadRestDays());
     setEffortHistory(getEffortHistory());
+    setMostSkipped(getMostSkippedExercises(5));
+    setMostUsedExercises(getMostUsedExercises(5));
+  }, []);
+
+  // Handle clicking on a date to view workout details
+  const handleDateClick = useCallback((dateStr: string) => {
+    const sessions = getSessionsByDate(dateStr);
+    if (sessions.length > 0) {
+      setSelectedDate(dateStr);
+      setSelectedDateWorkouts(sessions);
+    }
   }, []);
 
   const handleToggleYearDay = useCallback((dateStr: string) => {
-    // Optimistic update for instant feedback
-    const hasWorkout = (yearlyData.get(dateStr) || 0) > 0;
-    const isRest = restDays.has(dateStr);
+    // Perform the storage update first
+    const result = toggleYearDayStatus(dateStr);
 
-    // Predict next state: none -> workout -> rest -> none
-    if (!hasWorkout && !isRest) {
-      // none -> workout
-      setYearlyData(prev => new Map(prev).set(dateStr, 1));
-    } else if (hasWorkout && !isRest) {
-      // workout -> rest
-      setYearlyData(prev => {
-        const next = new Map(prev);
-        next.delete(dateStr);
-        return next;
-      });
-      setRestDays(prev => new Set(prev).add(dateStr));
-    } else {
-      // rest -> none
-      setRestDays(prev => {
-        const next = new Set(prev);
-        next.delete(dateStr);
-        return next;
-      });
+    // If protected, don't update UI
+    if (result === 'protected') {
+      return;
     }
 
-    // Perform actual storage update
-    toggleYearDayStatus(dateStr);
-
-    // Refresh stats and week dates (these are derived and need recalculation)
+    // Re-fetch from storage to ensure consistency
+    setYearlyData(getYearlyContributions());
+    setRestDays(loadRestDays());
     setStats(getWorkoutStats());
     setThisWeekDates(getThisWeekWorkoutDates());
-  }, [yearlyData, restDays]);
-
-  // Week starts on Monday
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const today = new Date();
-
-  // Get dates for this week (Monday to Sunday)
-  const weekDates = useMemo(() => {
-    const dates: Date[] = [];
-    const currentDay = today.getDay();
-    // Adjust for Monday start (0 = Monday, 6 = Sunday)
-    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() + mondayOffset);
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      dates.push(date);
-    }
-    return dates;
   }, []);
 
+
+  // This Month calendar grid
+  const monthCalendar = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+
+    // Get the day of week the month starts on (0 = Sunday)
+    const startDayOfWeek = firstDay.getDay();
+    // Adjust for Monday start
+    const mondayAdjustedStart = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+
+    const weeks: { days: { date: Date | null; dateStr: string; hasWorkout: boolean; isRest: boolean; isToday: boolean; isPast: boolean }[]; isCurrentWeek: boolean }[] = [];
+    let currentWeekDays: { date: Date | null; dateStr: string; hasWorkout: boolean; isRest: boolean; isToday: boolean; isPast: boolean }[] = [];
+    let weekContainsToday = false;
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Add empty cells for days before the month starts
+    for (let i = 0; i < mondayAdjustedStart; i++) {
+      currentWeekDays.push({ date: null, dateStr: '', hasWorkout: false, isRest: false, isToday: false, isPast: false });
+    }
+
+    // Add all days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateStr = date.toISOString().split('T')[0];
+      const isToday = day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
+      const isPast = date < today;
+
+      if (isToday) weekContainsToday = true;
+
+      currentWeekDays.push({
+        date,
+        dateStr,
+        hasWorkout: (yearlyData.get(dateStr) || 0) > 0,
+        isRest: restDays.has(dateStr),
+        isToday,
+        isPast,
+      });
+
+      if (currentWeekDays.length === 7) {
+        weeks.push({ days: currentWeekDays, isCurrentWeek: weekContainsToday });
+        currentWeekDays = [];
+        weekContainsToday = false;
+      }
+    }
+
+    // Fill remaining days in last week
+    if (currentWeekDays.length > 0) {
+      while (currentWeekDays.length < 7) {
+        currentWeekDays.push({ date: null, dateStr: '', hasWorkout: false, isRest: false, isToday: false, isPast: false });
+      }
+      weeks.push({ days: currentWeekDays, isCurrentWeek: weekContainsToday });
+    }
+
+    // Format today's date as "Weekday, Month Day"
+    const todayFormatted = now.toLocaleString('default', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    return {
+      weeks,
+      monthName: firstDay.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      todayFormatted,
+    };
+  }, [yearlyData, restDays, currentDateStr]);
+
   // Year contribution grid starting from Jan 1, 2026
-  const { contributionGrid, monthLabels } = useMemo(() => {
+  const { contributionGrid, monthLabels, currentWeekIndex } = useMemo(() => {
     const startDate = new Date(2026, 0, 1); // Jan 1, 2026
     const endDate = new Date(2026, 11, 31); // Dec 31, 2026
-    const weeks: { date: string; hasWorkout: boolean; isRest: boolean }[][] = [];
-    let currentWeek: { date: string; hasWorkout: boolean; isRest: boolean }[] = [];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weeks: { date: string; hasWorkout: boolean; isRest: boolean; isPast: boolean }[][] = [];
+    let currentWeek: { date: string; hasWorkout: boolean; isRest: boolean; isPast: boolean }[] = [];
     const labels: { weekIndex: number; label: string }[] = [];
+    let foundCurrentWeekIdx = -1;
 
     // Start from the Monday of the week containing Jan 1
     const firstDay = startDate.getDay();
@@ -114,11 +197,18 @@ export function HomePage() {
 
     let currentMonth = -1;
     let currentDate = new Date(gridStart);
+    let weekContainsToday = false;
 
     while (currentDate <= endDate || currentWeek.length > 0) {
       const dateStr = currentDate.toISOString().split('T')[0];
       const isInYear = currentDate >= startDate && currentDate <= endDate;
       const month = currentDate.getMonth();
+      const isPast = currentDate < today;
+
+      // Check if this day is today
+      if (currentDate.toDateString() === now.toDateString()) {
+        weekContainsToday = true;
+      }
 
       // Track month changes for labels
       if (isInYear && month !== currentMonth && currentWeek.length === 0) {
@@ -133,11 +223,16 @@ export function HomePage() {
         date: isInYear ? dateStr : '',
         hasWorkout: isInYear ? (yearlyData.get(dateStr) || 0) > 0 : false,
         isRest: isInYear ? restDays.has(dateStr) : false,
+        isPast: isInYear ? isPast : false,
       });
 
       if (currentWeek.length === 7) {
+        if (weekContainsToday) {
+          foundCurrentWeekIdx = weeks.length;
+        }
         weeks.push(currentWeek);
         currentWeek = [];
+        weekContainsToday = false;
       }
 
       currentDate.setDate(currentDate.getDate() + 1);
@@ -148,13 +243,16 @@ export function HomePage() {
 
     if (currentWeek.length > 0) {
       while (currentWeek.length < 7) {
-        currentWeek.push({ date: '', hasWorkout: false, isRest: false });
+        currentWeek.push({ date: '', hasWorkout: false, isRest: false, isPast: false });
+      }
+      if (weekContainsToday) {
+        foundCurrentWeekIdx = weeks.length;
       }
       weeks.push(currentWeek);
     }
 
-    return { contributionGrid: weeks, monthLabels: labels };
-  }, [yearlyData, restDays]);
+    return { contributionGrid: weeks, monthLabels: labels, currentWeekIndex: foundCurrentWeekIdx };
+  }, [yearlyData, restDays, currentDateStr]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -179,120 +277,202 @@ export function HomePage() {
     window.location.reload();
   };
 
-  const todayDate = today.getDate();
+
+  // Workout details modal
+  if (selectedDate && selectedDateWorkouts.length > 0) {
+    const dateDisplay = new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+    return (
+      <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
+        <header className="px-4 pt-16 pb-4 safe-top">
+          <button
+            onClick={() => { setSelectedDate(null); setSelectedDateWorkouts([]); }}
+            className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-4"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Workout History</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{dateDisplay}</p>
+        </header>
+
+        <div className="px-4 space-y-4">
+          {selectedDateWorkouts.map(session => (
+            <div
+              key={session.id}
+              className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{session.name}</h3>
+                {session.overallEffort && (
+                  <span className="px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+                    Effort: {session.overallEffort}/10
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400 mb-4">
+                <span>{session.exercises.length} exercises</span>
+                {session.totalDuration && (
+                  <span>{Math.round(session.totalDuration / 60)} min</span>
+                )}
+              </div>
+
+              {/* Exercise list */}
+              {session.exercises.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
+                  <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Exercises</h4>
+                  <div className="space-y-2">
+                    {session.exercises.map((log, idx) => {
+                      const exercise = getExerciseById(log.exerciseId);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/50"
+                        >
+                          <span className="text-sm text-slate-700 dark:text-slate-300">
+                            {exercise?.name || log.exerciseId}
+                          </span>
+                          <span className="text-sm text-slate-500 dark:text-slate-400 tabular-nums">
+                            {log.weight && `${log.weight}lb`}
+                            {log.weight && log.reps && ' × '}
+                            {log.reps && `${log.reps}`}
+                            {log.duration && `${log.duration}s`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Blocks summary */}
+              {session.blocks && session.blocks.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-3 mt-3">
+                  <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Workout Structure</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {session.blocks.map((block, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      >
+                        {block.name} ({block.exercises.length})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       {/* Header */}
-      <header className="px-4 pt-16 pb-4 safe-top">
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{greeting}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Ready to moove?</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Refresh button */}
-            <button
-              onClick={handleRefresh}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-              title="Refresh"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-            {/* Calendar icon with today's date inside */}
-            <div className="flex flex-col w-9 h-9 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800">
-              <div className="h-2 bg-emerald-500" />
-              <span className="flex-1 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">{todayDate}</span>
+      <header className="safe-top pt-12">
+        <div className="px-4 pb-4">
+          {/* Top row: Logo + title | Buttons */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+              <img src="/moove.svg" alt="Moove" className="h-5 dark:invert" />
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={handleRefresh} className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 border border-slate-300/50 dark:border-slate-600/50 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
             </div>
           </div>
+
+          {/* Full-width greeting */}
+          <p className="text-base text-slate-600 dark:text-slate-300 leading-relaxed">{greeting}</p>
         </div>
       </header>
 
-      {/* Streak Banner */}
-      {stats.currentStreak > 0 && (
-        <section className="px-4 mb-4">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-amber-100 to-emerald-100 dark:from-amber-600/20 dark:to-emerald-600/20 border border-amber-300 dark:border-amber-600/30">
-            <span className="text-2xl">🔥</span>
-            <div className="flex-1">
-              <span className="text-lg font-bold text-amber-700 dark:text-amber-400">{stats.currentStreak} day streak</span>
-              {stats.longestStreak > stats.currentStreak && (
-                <span className="text-sm text-slate-600 dark:text-slate-400 ml-2">
-                  (best: {stats.longestStreak})
-                </span>
-              )}
+      {/* This Month Calendar */}
+      <section className="px-4 mb-6 mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">This Month</h2>
+          {stats.currentStreak > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">🔥</span>
+              <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                {stats.currentStreak} day{stats.currentStreak !== 1 ? 's' : ''}
+              </span>
             </div>
-          </div>
-        </section>
-      )}
-
-      {/* Weekly Activity with Checkmarks */}
-      <section className="px-4 mb-6">
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-3">This Week</h2>
+          )}
+        </div>
         <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
-          <div className="flex justify-between gap-1">
-            {dayNames.map((day, i) => {
-              const date = weekDates[i];
-              const dateStr = date.toISOString().split('T')[0];
-              const hasWorkout = thisWeekDates.has(date.toDateString());
-              const isRest = restDays.has(dateStr);
-              const isToday = date.toDateString() === today.toDateString();
-              const isFuture = date > today;
-              const isRealWorkout = hasRealWorkoutOnDate(dateStr);
-              // Can toggle unless it's a future date or a real workout
-              const canToggle = !isFuture && !isRealWorkout;
-
-              return (
-                <div key={day} className="flex-1 text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (canToggle) handleToggleYearDay(dateStr);
-                    }}
-                    disabled={!canToggle}
-                    className={`h-11 w-11 mx-auto rounded-full mb-1 flex items-center justify-center transition-all touch-manipulation ${
-                      hasWorkout
-                        ? isRealWorkout
-                          ? 'bg-emerald-600 ring-2 ring-emerald-300 dark:ring-emerald-700'
-                          : 'bg-emerald-500 hover:bg-emerald-400'
-                        : isRest
-                        ? 'bg-purple-400 hover:bg-purple-300 dark:bg-purple-500 dark:hover:bg-purple-400'
-                        : isToday
-                        ? 'border-2 border-dashed border-emerald-500 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600'
-                        : isFuture
-                        ? 'bg-slate-100 dark:bg-slate-700/50'
-                        : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'
-                    } ${canToggle ? 'cursor-pointer active:scale-95' : ''}`}
-                    title={isRealWorkout ? 'Completed workout - cannot modify' : 'Tap to toggle status'}
-                  >
-                    {hasWorkout && (
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                    {isRest && !hasWorkout && (
-                      <span className="text-white text-xs font-medium">R</span>
-                    )}
-                  </button>
-                  <div className={`text-xs font-medium ${
-                    isToday
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-slate-600 dark:text-slate-400'
-                  }`}>
-                    {day}
-                  </div>
-                  <div className={`text-[10px] ${
-                    isToday
-                      ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                      : 'text-slate-400 dark:text-slate-500'
-                  }`}>
-                    {date.getDate()}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="text-sm text-slate-500 dark:text-slate-400 mb-3 text-center">{monthCalendar.todayFormatted}</div>
+          {/* Day headers */}
+          <div className="grid grid-cols-7 mb-2">
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
+              <div key={i} className="flex justify-center text-xs text-slate-400 dark:text-slate-500 font-medium">
+                {day}
+              </div>
+            ))}
           </div>
+          {/* Calendar grid */}
+          <div className="space-y-1">
+            {monthCalendar.weeks.map((week, weekIdx) => (
+              <div
+                key={weekIdx}
+                className={`grid grid-cols-7 py-1 -mx-2 px-2 rounded-lg transition-colors ${
+                  week.isCurrentWeek
+                    ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                    : ''
+                }`}
+              >
+                {week.days.map((day, dayIdx) => {
+                  const hasRealWorkout = day.dateStr ? hasRealWorkoutOnDate(day.dateStr) : false;
+                  return (
+                    <div key={dayIdx} className="flex justify-center">
+                      <button
+                        onClick={() => {
+                          if (!day.dateStr) return;
+                          if (hasRealWorkout) {
+                            handleDateClick(day.dateStr);
+                          } else {
+                            handleToggleYearDay(day.dateStr);
+                          }
+                        }}
+                        disabled={!day.date}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
+                          !day.date
+                            ? 'bg-transparent'
+                            : day.hasWorkout
+                            ? hasRealWorkout
+                              ? `bg-emerald-600 text-white ring-2 ring-emerald-300 dark:ring-emerald-700 ${day.isPast ? 'opacity-60' : ''}`
+                              : `bg-emerald-500 text-white ${day.isPast ? 'opacity-60' : ''}`
+                            : day.isRest
+                            ? `bg-purple-400 dark:bg-purple-500 text-white ${day.isPast ? 'opacity-60' : ''}`
+                            : day.isToday
+                            ? 'border-2 border-dashed border-emerald-500 text-slate-700 dark:text-slate-300'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        } ${day.isToday && day.date ? 'ring-2 ring-offset-2 ring-emerald-500 dark:ring-offset-slate-800' : ''}`}
+                        title={hasRealWorkout ? 'Tap to view workout details' : ''}
+                      >
+                        {day.date?.getDate()}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          {/* Legend */}
           <div className="flex items-center justify-center gap-4 mt-3 text-[10px] text-slate-400 dark:text-slate-500">
             <div className="flex items-center gap-1">
               <div className="w-3 h-3 rounded-full bg-emerald-500" />
@@ -302,7 +482,10 @@ export function HomePage() {
               <div className="w-3 h-3 rounded-full bg-purple-400 dark:bg-purple-500" />
               <span>Rest</span>
             </div>
-            <span className="text-[9px]">Tap to toggle</span>
+            <div className="flex items-center gap-1">
+              <div className="w-6 h-3 rounded bg-emerald-100 dark:bg-emerald-900/40" />
+              <span>This week</span>
+            </div>
           </div>
         </div>
       </section>
@@ -333,36 +516,42 @@ export function HomePage() {
             {/* Grid */}
             <div className="flex gap-[3px]">
               {contributionGrid.map((week, weekIndex) => (
-                <div key={weekIndex} className="flex flex-col gap-[3px]">
-                  {week.map((day, dayIndex) => (
-                    <button
-                      type="button"
-                      key={`${weekIndex}-${dayIndex}`}
-                      onClick={() => day.date && handleToggleYearDay(day.date)}
-                      disabled={!day.date}
-                      className={`w-[11px] h-[11px] rounded-[2px] transition-colors touch-manipulation ${
-                        !day.date
-                          ? 'bg-transparent cursor-default'
-                          : day.hasWorkout
-                          ? 'bg-emerald-500 hover:bg-emerald-400 cursor-pointer'
-                          : day.isRest
-                          ? 'bg-purple-400 hover:bg-purple-300 dark:bg-purple-500 dark:hover:bg-purple-400 cursor-pointer'
-                          : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer'
-                      }`}
-                      title={day.date ? `${day.date}: ${day.hasWorkout ? 'Worked out' : day.isRest ? 'Rest day' : 'No workout'} (tap to change)` : ''}
-                    />
-                  ))}
+                <div key={weekIndex} className="flex flex-col items-center">
+                  <div className="flex flex-col gap-[3px]">
+                    {week.map((day, dayIndex) => (
+                      <button
+                        type="button"
+                        key={`${weekIndex}-${dayIndex}`}
+                        onClick={() => day.date && handleToggleYearDay(day.date)}
+                        disabled={!day.date}
+                        className={`w-[11px] h-[11px] rounded-[2px] transition-colors touch-manipulation ${
+                          !day.date
+                            ? 'bg-transparent cursor-default'
+                            : day.hasWorkout
+                            ? `bg-emerald-500 hover:bg-emerald-400 cursor-pointer ${day.isPast ? 'opacity-60' : ''}`
+                            : day.isRest
+                            ? `bg-purple-400 hover:bg-purple-300 dark:bg-purple-500 dark:hover:bg-purple-400 cursor-pointer ${day.isPast ? 'opacity-60' : ''}`
+                            : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 cursor-pointer'
+                        }`}
+                        title={day.date ? `${day.date}: ${day.hasWorkout ? 'Worked out' : day.isRest ? 'Rest day' : 'No workout'} (tap to change)` : ''}
+                      />
+                    ))}
+                  </div>
+                  {/* Current week indicator dot */}
+                  {weekIndex === currentWeekIndex && (
+                    <div className="w-[5px] h-[5px] rounded-full bg-emerald-500 mt-1.5" />
+                  )}
                 </div>
               ))}
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 mt-3 text-xs text-slate-500">
-            <div className="w-[11px] h-[11px] rounded-[2px] bg-slate-200 dark:bg-slate-700" />
-            <span>None</span>
-            <div className="w-[11px] h-[11px] rounded-[2px] bg-emerald-500 ml-2" />
+          <div className="flex items-center justify-center gap-2 mt-3 text-xs text-slate-500">
+            <div className="w-[11px] h-[11px] rounded-[2px] bg-emerald-500" />
             <span>Workout</span>
             <div className="w-[11px] h-[11px] rounded-[2px] bg-purple-400 dark:bg-purple-500 ml-2" />
             <span>Rest</span>
+            <div className="w-[5px] h-[5px] rounded-full bg-emerald-500 ml-2" />
+            <span>This week</span>
           </div>
         </div>
       </section>
@@ -409,6 +598,99 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Insights - Tabbed card for Most Used / Most Skipped */}
+      {(mostUsedExercises.length > 0 || mostSkipped.length > 0) && (
+        <section className="px-4 mb-6">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-3">Insights</h2>
+          <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            {/* Tab buttons - pill style matching Library */}
+            <div className="p-3 pb-0">
+              <div className="flex rounded-xl bg-slate-200 dark:bg-slate-700 p-1">
+                <button
+                  onClick={() => setExerciseTab('used')}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    exerciseTab === 'used'
+                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Most Used
+                </button>
+                <button
+                  onClick={() => setExerciseTab('skipped')}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    exerciseTab === 'skipped'
+                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Most Skipped
+                </button>
+              </div>
+            </div>
+            {/* Tab content */}
+            <div className="p-4">
+              {exerciseTab === 'used' && mostUsedExercises.length > 0 && (
+                <div className="space-y-2">
+                  {mostUsedExercises.map((item, idx) => {
+                    const exercise = getExerciseById(item.exerciseId);
+                    if (!exercise) return null;
+                    return (
+                      <div key={item.exerciseId} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-slate-400 dark:text-slate-500 w-4">{idx + 1}.</span>
+                          <span className="text-sm text-slate-700 dark:text-slate-300">{exercise.name}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-xs">
+                          {item.count}x
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {exerciseTab === 'used' && mostUsedExercises.length === 0 && (
+                <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-4">No exercise data yet</p>
+              )}
+              {exerciseTab === 'skipped' && mostSkipped.length > 0 && (
+                <div className="space-y-2">
+                  {mostSkipped.map((item, idx) => {
+                    const exercise = getExerciseById(item.exerciseId);
+                    if (!exercise) return null;
+                    return (
+                      <div key={item.exerciseId} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-slate-400 dark:text-slate-500 w-4">{idx + 1}.</span>
+                          <span className="text-sm text-slate-700 dark:text-slate-300">{exercise.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          {item.skips > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                              {item.skips} skipped
+                            </span>
+                          )}
+                          {item.swaps > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                              {item.swaps} swapped
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                    Consider removing or replacing these exercises
+                  </p>
+                </div>
+              )}
+              {exerciseTab === 'skipped' && mostSkipped.length === 0 && (
+                <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-4">No skipped exercises</p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -336,10 +336,10 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
     <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top bg-slate-100 dark:bg-slate-950">
       <header className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
+          <div className="flex items-center gap-2">
+            <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Build Workout</h1>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Build Workout</h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">Add exercises to each block</p>
             </div>
           </div>

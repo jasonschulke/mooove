@@ -1,3 +1,11 @@
+/**
+ * Vite Configuration for Moove PWA
+ *
+ * - React with Fast Refresh
+ * - Tailwind CSS v4
+ * - PWA with auto-update and offline support
+ */
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -7,9 +15,10 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // PWA configuration for installable app experience
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo_icon.png', 'logo_icon_wordmark.png'],
+      includeAssets: ['logo_icon.png', 'logo_stacked.png'],
       manifest: {
         name: 'Moove',
         short_name: 'Moove',

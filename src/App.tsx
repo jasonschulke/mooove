@@ -1,3 +1,13 @@
+/**
+ * Moove - Personal Workout Tracking PWA
+ *
+ * Main application component handling:
+ * - Page navigation via bottom nav bar
+ * - Theme management (dark/light mode)
+ * - Workout session state
+ * - Onboarding flow for new users
+ */
+
 import { useState, useEffect } from 'react';
 import type { WorkoutBlock, EffortLevel } from './types';
 import { useWorkout } from './hooks/useWorkout';
@@ -16,7 +26,10 @@ import { Onboarding } from './components/Onboarding';
 
 const ONBOARDING_KEY = 'workout_onboarding_complete';
 
+/** Available pages in the app */
 type Page = 'home' | 'workout' | 'library' | 'chat' | 'settings';
+
+/** Theme options */
 type Theme = 'dark' | 'light';
 
 function App() {
@@ -150,6 +163,8 @@ function App() {
             onCompleteWorkout={handleCompleteWorkout}
             onCancelWorkout={handleCancelWorkout}
             onStartWorkout={() => setShowBuilder(true)}
+            onUpdateSwappedExercises={workout.updateSwappedExercises}
+            onUpdateSessionBlocks={workout.updateSessionBlocks}
           />
         ) : (
           <WorkoutStartFlow

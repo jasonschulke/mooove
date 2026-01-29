@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { WorkoutExercise } from '../types';
 import { getExerciseById, getAlternatives } from '../data/exercises';
-import { getLastWeekAverages, getExerciseHistory, getDefaultWeightForEquipment } from '../data/storage';
+import { getLastWeekAverages, getDefaultWeightForEquipment } from '../data/storage';
 import { fetchExerciseGif } from '../utils/exerciseGifs';
 import { Timer } from './Timer';
-import { Sparkline } from './Sparkline';
 
 interface ExerciseViewProps {
   workoutExercise: WorkoutExercise;
@@ -48,10 +47,16 @@ export function ExerciseView({
 
   const [weight, setWeight] = useState<number | undefined>(getInitialWeight);
   const [reps, setReps] = useState<number | string | undefined>(getInitialReps);
-  const [showHistory, setShowHistory] = useState(false);
   const [showTimer, setShowTimer] = useState(false);
   const [gifUrl, setGifUrl] = useState<string | null>(null);
   const [gifLoading, setGifLoading] = useState(true);
+
+  // Reset state when exercise changes - fixes the weight/reps auto-apply bug
+  useEffect(() => {
+    setWeight(getInitialWeight());
+    setReps(getInitialReps());
+    setShowTimer(false);
+  }, [workoutExercise.exerciseId]);
 
   // Fetch exercise GIF
   useEffect(() => {
@@ -69,7 +74,6 @@ export function ExerciseView({
   }
 
   const alternatives = getAlternatives(exercise.id);
-  const history = getExerciseHistory(exercise.id, 10);
   const duration = workoutExercise.duration ?? exercise.defaultDuration;
 
   const handleComplete = () => {
@@ -108,59 +112,6 @@ export function ExerciseView({
           </div>
         )}
 
-        {/* History with Sparklines */}
-        {history.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-center gap-4">
-              {/* Weight trend */}
-              {exercise.equipment !== 'bodyweight' && history.some(h => h.weight) && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide">Weight</span>
-                  <Sparkline history={history} metric="weight" />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {history[0].weight}lb
-                  </span>
-                </div>
-              )}
-              {/* Reps trend */}
-              {history.some(h => h.reps) && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide">Reps</span>
-                  <Sparkline history={history} metric="reps" />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {history[0].reps}
-                  </span>
-                </div>
-              )}
-            </div>
-            {/* Toggle detailed history */}
-            <div className="text-center mt-2">
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500"
-              >
-                {showHistory ? 'hide details' : `show ${history.length} sessions`}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Detailed History - Collapsible */}
-        {showHistory && history.length > 0 && (
-          <div className="mb-6 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto">
-            {history.map((log, i) => (
-              <div key={i} className="flex justify-between text-sm py-1 border-b border-slate-200 dark:border-slate-700 last:border-0">
-                <span className="text-slate-500">
-                  {new Date(log.completedAt).toLocaleDateString()}
-                </span>
-                <span className="text-slate-700 dark:text-slate-300">
-                  {log.weight && `${log.weight}lb`} {log.reps && `× ${log.reps}`}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Timer - Collapsible */}
         {showTimer && (
           <div className="mb-6">
@@ -168,32 +119,38 @@ export function ExerciseView({
           </div>
         )}
 
-        {/* Weight & Reps Input - Compact */}
-        {!duration && (
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Weight</label>
-              <div className="relative">
-                {exercise.equipment === 'bodyweight' ? (
-                  <div className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-base font-medium text-center">
-                    Bodyweight
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      type="number"
-                      value={weight || ''}
-                      onChange={e => setWeight(e.target.value ? Number(e.target.value) : undefined)}
-                      className="w-full px-3 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-lg font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors"
-                      placeholder="—"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">lb</span>
-                  </>
-                )}
-              </div>
+        {/* Weight & Reps Input - Always shown for stable card height */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Weight</label>
+            <div className="relative">
+              {exercise.equipment === 'bodyweight' ? (
+                <div className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-base font-medium text-center">
+                  Bodyweight
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="number"
+                    value={weight || ''}
+                    onChange={e => setWeight(e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full px-3 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-lg font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors"
+                    placeholder="—"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">lb</span>
+                </>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Reps</label>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">
+              {duration ? 'Duration' : 'Reps'}
+            </label>
+            {duration ? (
+              <div className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-base font-medium text-center">
+                {duration}s
+              </div>
+            ) : (
               <input
                 type={reps === 'AMRAP' ? 'text' : 'number'}
                 value={reps === 'AMRAP' ? 'AMRAP' : reps || ''}
@@ -208,37 +165,39 @@ export function ExerciseView({
                 className="w-full px-3 py-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-lg font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors"
                 placeholder="—"
               />
-            </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Description/Instructions - Above swap */}
-        {exercise.description && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">How to</div>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              {exercise.description}
-            </p>
-          </div>
-        )}
+        {/* Description/Instructions - Fixed height container */}
+        <div className="mb-4 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 min-h-[72px]">
+          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">How to</div>
+          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+            {exercise.description || 'Perform the exercise with controlled movement and proper form.'}
+          </p>
+        </div>
 
-        {/* Swap - Simple text links */}
-        {alternatives.length > 0 && (
-          <div className="text-center">
-            <span className="text-sm text-slate-400 dark:text-slate-500">Swap: </span>
-            {alternatives.map((alt, idx) => (
-              <span key={alt.id}>
-                <button
-                  onClick={() => onSwapExercise(alt.id)}
-                  className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300"
-                >
-                  {alt.name}
-                </button>
-                {idx < alternatives.length - 1 && <span className="text-slate-300 dark:text-slate-600 mx-1">·</span>}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Swap - Always visible with fixed height */}
+        <div className="text-center h-5">
+          {alternatives.length > 0 ? (
+            <>
+              <span className="text-sm text-slate-400 dark:text-slate-500">Swap: </span>
+              {alternatives.map((alt, idx) => (
+                <span key={alt.id}>
+                  <button
+                    onClick={() => onSwapExercise(alt.id)}
+                    className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300"
+                  >
+                    {alt.name}
+                  </button>
+                  {idx < alternatives.length - 1 && <span className="text-slate-300 dark:text-slate-600 mx-1">·</span>}
+                </span>
+              ))}
+            </>
+          ) : (
+            <span className="text-sm text-slate-300 dark:text-slate-700">No alternatives available</span>
+          )}
+        </div>
       </div>
 
       {/* Footer Actions */}

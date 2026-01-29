@@ -1,3 +1,13 @@
+/**
+ * Moove - Workout Tracking App
+ * Core type definitions for the application
+ */
+
+// ============================================================================
+// EQUIPMENT & MOVEMENT TYPES
+// ============================================================================
+
+/** Available equipment types for exercises */
 export type EquipmentType =
   | 'bodyweight'
   | 'dumbbell'
@@ -8,6 +18,7 @@ export type EquipmentType =
   | 'cable'
   | 'machine';
 
+/** Movement patterns / muscle groups for categorizing exercises */
 export type MuscleArea =
   | 'squat'
   | 'hinge'
@@ -20,10 +31,17 @@ export type MuscleArea =
   | 'cooldown'
   | 'full-body';
 
+/** Workout block types for structuring sessions */
 export type BlockType = 'warmup' | 'strength' | 'conditioning' | 'cooldown';
 
+/** Rate of Perceived Exertion (RPE) scale 1-10 */
 export type EffortLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
+// ============================================================================
+// EXERCISE DEFINITIONS
+// ============================================================================
+
+/** Definition of an exercise in the exercise library */
 export interface Exercise {
   id: string;
   name: string;
@@ -31,42 +49,51 @@ export interface Exercise {
   equipment: EquipmentType;
   defaultWeight?: number;
   defaultReps?: number | 'AMRAP';
-  defaultDuration?: number; // seconds
+  defaultDuration?: number;      // Duration in seconds
   imageUrl?: string;
   description?: string;
-  alternatives?: string[]; // IDs of alternative exercises
+  alternatives?: string[];       // IDs of exercises that can substitute
 }
 
+/** An exercise as configured within a workout (with specific parameters) */
 export interface WorkoutExercise {
   exerciseId: string;
   weight?: number;
   reps?: number | 'AMRAP';
-  duration?: number; // seconds
+  duration?: number;             // Duration in seconds
   sets?: number;
   notes?: string;
 }
 
+// ============================================================================
+// WORKOUT STRUCTURE
+// ============================================================================
+
+/** A set within a workout block (for grouped exercises) */
 export interface WorkoutSet {
   id: string;
   setNumber: number;
   exercises: WorkoutExercise[];
 }
 
+/** A block/section within a workout (warmup, strength, etc.) */
 export interface WorkoutBlock {
   id: string;
   type: BlockType;
   name: string;
-  exercises: WorkoutExercise[]; // Flat list for backward compatibility
-  sets?: WorkoutSet[]; // Optional set-based structure
-  repeat?: number; // number of times to repeat the block (for sets)
+  exercises: WorkoutExercise[];  // Flat exercise list
+  sets?: WorkoutSet[];           // Optional set-based structure
+  repeat?: number;               // Times to repeat block
 }
 
+/** A saved workout template */
 export interface WorkoutTemplate {
   id: string;
   name: string;
   blocks: WorkoutBlock[];
 }
 
+/** A workout saved to the user's library */
 export interface SavedWorkout {
   id: string;
   name: string;
@@ -76,6 +103,11 @@ export interface SavedWorkout {
   updatedAt: string;
 }
 
+// ============================================================================
+// SESSION TRACKING
+// ============================================================================
+
+/** Log entry for a completed exercise during a session */
 export interface ExerciseLog {
   exerciseId: string;
   weight?: number;
@@ -86,6 +118,7 @@ export interface ExerciseLog {
   completedAt: string;
 }
 
+/** An active or completed workout session */
 export interface WorkoutSession {
   id: string;
   templateId?: string;
@@ -94,10 +127,11 @@ export interface WorkoutSession {
   startedAt: string;
   completedAt?: string;
   exercises: ExerciseLog[];
-  totalDuration?: number;
+  totalDuration?: number;        // Duration in seconds
   overallEffort?: EffortLevel;
 }
 
+/** State for tracking position within an active workout */
 export interface WorkoutState {
   currentSession: WorkoutSession | null;
   currentBlockIndex: number;
@@ -107,6 +141,24 @@ export interface WorkoutState {
   timerSeconds: number;
 }
 
+// ============================================================================
+// USER PREFERENCES
+// ============================================================================
+
+/** Personality types for the AI coach / greeting messages */
+export type PersonalityType = 'neutral' | 'sarcastic' | 'encouraging' | 'drill-sergeant' | 'zen' | 'trump';
+
+/** Available personality options with descriptions */
+export const PERSONALITY_OPTIONS: { value: PersonalityType; label: string; description: string }[] = [
+  { value: 'zen', label: 'Zen', description: 'Calm and mindful' },
+  { value: 'encouraging', label: 'Encouraging', description: 'Supportive and motivating' },
+  { value: 'neutral', label: 'Neutral', description: 'Straightforward and professional' },
+  { value: 'sarcastic', label: 'Sarcastic', description: 'Witty with playful sarcasm' },
+  { value: 'drill-sergeant', label: 'Drill Sergeant', description: 'Tough love and discipline' },
+  { value: 'trump', label: 'Trump', description: 'Make your workouts great again' },
+];
+
+/** RPE scale descriptions for the effort picker UI */
 export const EFFORT_DESCRIPTIONS: Record<EffortLevel, { label: string; description: string }> = {
   1: { label: 'Very Light', description: 'Barely any effort, could do this all day' },
   2: { label: 'Light', description: 'Easy breathing, very comfortable' },

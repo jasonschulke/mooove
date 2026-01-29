@@ -1,20 +1,38 @@
+/**
+ * Storage Layer - Local storage persistence for all app data
+ *
+ * All data is stored in localStorage with JSON serialization.
+ * Cloud sync is available but disabled by default to prevent data sharing.
+ */
+
 import type { WorkoutSession, ExerciseLog, SavedWorkout, WorkoutBlock } from '../types';
 import { generateUUID } from '../utils/uuid';
 import { getDeviceId } from './sync';
 // Cloud sync disabled - was causing data sharing between users
 // import { scheduleSyncToCloud } from './sync';
 
-const SESSIONS_KEY = 'workout_sessions';
-const CURRENT_SESSION_KEY = 'current_workout_session';
-const SAVED_WORKOUTS_KEY = 'saved_workouts';
-const REST_DAYS_KEY = 'rest_days';
-const CUSTOM_EXERCISES_KEY = 'custom_exercises';
-const CLAUDE_API_KEY = 'claude_api_key';
-const CHAT_HISTORY_KEY = 'claude_chat_history';
-const EQUIPMENT_CONFIG_KEY = 'equipment_config';
-const USER_NAME_KEY = 'workout_user_name';
+// ============================================================================
+// STORAGE KEYS
+// ============================================================================
 
-// User name
+const SESSIONS_KEY = 'workout_sessions';           // Completed workout sessions
+const CURRENT_SESSION_KEY = 'current_workout_session'; // Active workout in progress
+const SAVED_WORKOUTS_KEY = 'saved_workouts';       // User's workout library
+const REST_DAYS_KEY = 'rest_days';                 // Scheduled rest days
+const CUSTOM_EXERCISES_KEY = 'custom_exercises';   // User-created exercises
+const CLAUDE_API_KEY = 'claude_api_key';           // AI chat API key
+const CHAT_HISTORY_KEY = 'claude_chat_history';    // AI chat message history
+const EQUIPMENT_CONFIG_KEY = 'equipment_config';   // Default weights per equipment
+const USER_NAME_KEY = 'workout_user_name';         // User's display name
+const PERSONALITY_KEY = 'workout_personality';     // AI personality preference
+const FAVORITES_KEY = 'workout_favorites';         // Favorited workouts/exercises
+const SKIP_COUNTS_KEY = 'workout_skip_counts';     // Skip/swap tracking
+const CUSTOM_DESCRIPTIONS_KEY = 'workout_custom_descriptions'; // User exercise notes
+
+// ============================================================================
+// USER PROFILE
+// ============================================================================
+
 export function saveUserName(name: string): void {
   localStorage.setItem(USER_NAME_KEY, name);
   // Log user identity for analytics
@@ -25,6 +43,10 @@ export function saveUserName(name: string): void {
 export function loadUserName(): string | null {
   return localStorage.getItem(USER_NAME_KEY);
 }
+
+// ============================================================================
+// WORKOUT SESSIONS
+// ============================================================================
 
 export function saveSessions(sessions: WorkoutSession[]): void {
   localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
@@ -53,6 +75,11 @@ export function addCompletedSession(session: WorkoutSession): void {
   sessions.unshift(session);
   saveSessions(sessions);
   saveCurrentSession(null);
+}
+
+export function deleteSession(sessionId: string): void {
+  const sessions = loadSessions();
+  saveSessions(sessions.filter(s => s.id !== sessionId));
 }
 
 // Saved Workouts (Library)
@@ -334,7 +361,10 @@ export function getWorkoutStats(): {
   };
 }
 
-// Rest Days
+// ============================================================================
+// REST DAYS
+// ============================================================================
+
 export function loadRestDays(): Set<string> {
   const data = localStorage.getItem(REST_DAYS_KEY);
   return data ? new Set(JSON.parse(data)) : new Set();
@@ -361,7 +391,10 @@ export function isRestDay(dateStr: string): boolean {
   return loadRestDays().has(dateStr);
 }
 
-// Custom Exercises
+// ============================================================================
+// CUSTOM EXERCISES
+// ============================================================================
+
 import type { Exercise } from '../types';
 
 export function loadCustomExercises(): Exercise[] {
@@ -389,8 +422,11 @@ export function deleteCustomExercise(id: string): void {
   saveCustomExercises(exercises.filter(e => e.id !== id));
 }
 
-// Claude API Key
-// Fallback key (base64 encoded + reversed for basic obfuscation)
+// ============================================================================
+// CLAUDE AI CHAT
+// ============================================================================
+
+// Fallback API key (base64 encoded + reversed for basic obfuscation)
 const _k = () => atob('QUFBXzlkeDUtQWo5ZTdWUTBsNmNGTjhkVGk2NFJuZ2lDN2hKc2ZHZmhSMm1qVXRacW9heHlSWlA1YWJxWHdzeE14dzVFRGJROUdoRFdDQ2FtX1pMcUJxN1ZXOFRFTEwtMzBpcGEtdG5hLWtz').split('').reverse().join('');
 
 export function getClaudeApiKey(): string | null {
@@ -431,7 +467,10 @@ export function clearChatHistory(): void {
   localStorage.removeItem(CHAT_HISTORY_KEY);
 }
 
-// Backlog Workouts - add/remove workout for specific dates
+// ============================================================================
+// BACKLOG WORKOUTS (Manual date entries)
+// ============================================================================
+
 export function addBacklogWorkout(dateStr: string): WorkoutSession {
   const sessions = loadSessions();
   const date = new Date(dateStr + 'T12:00:00');
@@ -543,7 +582,10 @@ export function toggleYearDayStatus(dateStr: string): 'none' | 'workout' | 'rest
   }
 }
 
-// Equipment Configuration
+// ============================================================================
+// EQUIPMENT CONFIGURATION
+// ============================================================================
+
 import type { EquipmentType } from '../types';
 
 export interface EquipmentConfig {
@@ -590,4 +632,270 @@ export function getDefaultWeightForEquipment(equipmentType: EquipmentType): numb
     default:
       return undefined;
   }
+}
+
+// ============================================================================
+// PERSONALITY SETTINGS
+// ============================================================================
+
+import type { PersonalityType } from '../types';
+
+export function loadPersonality(): PersonalityType {
+  const data = localStorage.getItem(PERSONALITY_KEY);
+  return (data as PersonalityType) || 'neutral';
+}
+
+export function savePersonality(personality: PersonalityType): void {
+  localStorage.setItem(PERSONALITY_KEY, personality);
+}
+
+// ============================================================================
+// FAVORITES
+// ============================================================================
+
+export interface FavoritesData {
+  workouts: string[];  // Array of workout IDs
+  exercises: string[]; // Array of exercise IDs
+}
+
+export function loadFavorites(): FavoritesData {
+  const data = localStorage.getItem(FAVORITES_KEY);
+  return data ? JSON.parse(data) : { workouts: [], exercises: [] };
+}
+
+export function saveFavorites(favorites: FavoritesData): void {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+}
+
+export function toggleFavoriteWorkout(workoutId: string): boolean {
+  const favorites = loadFavorites();
+  const index = favorites.workouts.indexOf(workoutId);
+  if (index === -1) {
+    favorites.workouts.push(workoutId);
+    saveFavorites(favorites);
+    return true;
+  } else {
+    favorites.workouts.splice(index, 1);
+    saveFavorites(favorites);
+    return false;
+  }
+}
+
+export function toggleFavoriteExercise(exerciseId: string): boolean {
+  const favorites = loadFavorites();
+  const index = favorites.exercises.indexOf(exerciseId);
+  if (index === -1) {
+    favorites.exercises.push(exerciseId);
+    saveFavorites(favorites);
+    return true;
+  } else {
+    favorites.exercises.splice(index, 1);
+    saveFavorites(favorites);
+    return false;
+  }
+}
+
+export function isFavoriteWorkout(workoutId: string): boolean {
+  return loadFavorites().workouts.includes(workoutId);
+}
+
+export function isFavoriteExercise(exerciseId: string): boolean {
+  return loadFavorites().exercises.includes(exerciseId);
+}
+
+// ============================================================================
+// SKIP/SWAP TRACKING
+// ============================================================================
+
+export interface SkipCounts {
+  [exerciseId: string]: { skips: number; swaps: number };
+}
+
+export function loadSkipCounts(): SkipCounts {
+  const data = localStorage.getItem(SKIP_COUNTS_KEY);
+  return data ? JSON.parse(data) : {};
+}
+
+export function saveSkipCounts(counts: SkipCounts): void {
+  localStorage.setItem(SKIP_COUNTS_KEY, JSON.stringify(counts));
+}
+
+export function incrementSkipCount(exerciseId: string): void {
+  const counts = loadSkipCounts();
+  if (!counts[exerciseId]) {
+    counts[exerciseId] = { skips: 0, swaps: 0 };
+  }
+  counts[exerciseId].skips++;
+  saveSkipCounts(counts);
+}
+
+export function incrementSwapCount(exerciseId: string): void {
+  const counts = loadSkipCounts();
+  if (!counts[exerciseId]) {
+    counts[exerciseId] = { skips: 0, swaps: 0 };
+  }
+  counts[exerciseId].swaps++;
+  saveSkipCounts(counts);
+}
+
+export function getMostSkippedExercises(limit = 5): { exerciseId: string; skips: number; swaps: number }[] {
+  const counts = loadSkipCounts();
+  return Object.entries(counts)
+    .map(([exerciseId, data]) => ({ exerciseId, ...data }))
+    .sort((a, b) => (b.skips + b.swaps) - (a.skips + a.swaps))
+    .slice(0, limit);
+}
+
+// Get workout sessions for a specific date
+export function getSessionsByDate(dateStr: string): WorkoutSession[] {
+  const sessions = loadSessions().filter(s => s.completedAt);
+  return sessions.filter(s => {
+    const sessionDate = new Date(s.startedAt).toISOString().split('T')[0];
+    return sessionDate === dateStr;
+  });
+}
+
+// Get most used workouts based on frequency
+export function getMostUsedWorkouts(limit = 10): { workoutName: string; count: number; lastUsed: string }[] {
+  const sessions = loadSessions().filter(s => s.completedAt && s.name);
+  const counts = new Map<string, { count: number; lastUsed: string }>();
+
+  sessions.forEach(s => {
+    const existing = counts.get(s.name) || { count: 0, lastUsed: '' };
+    existing.count++;
+    if (!existing.lastUsed || new Date(s.completedAt!) > new Date(existing.lastUsed)) {
+      existing.lastUsed = s.completedAt!;
+    }
+    counts.set(s.name, existing);
+  });
+
+  return Array.from(counts.entries())
+    .map(([workoutName, data]) => ({ workoutName, ...data }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+// Get most used exercises based on frequency
+export function getMostUsedExercises(limit = 10): { exerciseId: string; count: number; lastUsed: string }[] {
+  const sessions = loadSessions().filter(s => s.completedAt);
+  const counts = new Map<string, { count: number; lastUsed: string }>();
+
+  sessions.forEach(s => {
+    s.exercises.forEach(ex => {
+      const existing = counts.get(ex.exerciseId) || { count: 0, lastUsed: '' };
+      existing.count++;
+      if (!existing.lastUsed || new Date(ex.completedAt) > new Date(existing.lastUsed)) {
+        existing.lastUsed = ex.completedAt;
+      }
+      counts.set(ex.exerciseId, existing);
+    });
+  });
+
+  return Array.from(counts.entries())
+    .map(([exerciseId, data]) => ({ exerciseId, ...data }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+// ============================================================================
+// CUSTOM DESCRIPTIONS
+// ============================================================================
+
+export interface CustomDescriptions {
+  exercises: Record<string, string>; // exerciseId -> custom description
+  workouts: Record<string, string>;  // workoutId -> custom description
+}
+
+export function loadCustomDescriptions(): CustomDescriptions {
+  const data = localStorage.getItem(CUSTOM_DESCRIPTIONS_KEY);
+  return data ? JSON.parse(data) : { exercises: {}, workouts: {} };
+}
+
+export function saveCustomDescriptions(descriptions: CustomDescriptions): void {
+  localStorage.setItem(CUSTOM_DESCRIPTIONS_KEY, JSON.stringify(descriptions));
+}
+
+export function setExerciseDescription(exerciseId: string, description: string): void {
+  const descriptions = loadCustomDescriptions();
+  descriptions.exercises[exerciseId] = description;
+  saveCustomDescriptions(descriptions);
+}
+
+export function clearExerciseDescription(exerciseId: string): void {
+  const descriptions = loadCustomDescriptions();
+  delete descriptions.exercises[exerciseId];
+  saveCustomDescriptions(descriptions);
+}
+
+export function getExerciseDescription(exerciseId: string): string | undefined {
+  return loadCustomDescriptions().exercises[exerciseId];
+}
+
+export function setWorkoutDescription(workoutId: string, description: string): void {
+  const descriptions = loadCustomDescriptions();
+  descriptions.workouts[workoutId] = description;
+  saveCustomDescriptions(descriptions);
+}
+
+export function clearWorkoutDescription(workoutId: string): void {
+  const descriptions = loadCustomDescriptions();
+  delete descriptions.workouts[workoutId];
+  saveCustomDescriptions(descriptions);
+}
+
+export function getWorkoutDescription(workoutId: string): string | undefined {
+  return loadCustomDescriptions().workouts[workoutId];
+}
+
+// ============================================================================
+// DATA EXPORT
+// ============================================================================
+
+export function exportAllDataAsJSON(): string {
+  const data = {
+    exportDate: new Date().toISOString(),
+    sessions: loadSessions(),
+    savedWorkouts: loadSavedWorkouts(),
+    customExercises: loadCustomExercises(),
+    favorites: loadFavorites(),
+    skipCounts: loadSkipCounts(),
+    customDescriptions: loadCustomDescriptions(),
+    restDays: [...loadRestDays()],
+    equipmentConfig: loadEquipmentConfig(),
+    personality: loadPersonality(),
+    userName: loadUserName(),
+  };
+  return JSON.stringify(data, null, 2);
+}
+
+export function exportWorkoutsAsCSV(): string {
+  const sessions = loadSessions().filter(s => s.completedAt);
+  const lines: string[] = ['Date,Workout Name,Duration (min),Effort,Exercises Completed'];
+
+  sessions.forEach(s => {
+    const date = new Date(s.completedAt!).toLocaleDateString();
+    const duration = s.totalDuration ? Math.round(s.totalDuration / 60) : '';
+    const effort = s.overallEffort || '';
+    const exerciseCount = s.exercises.length;
+    lines.push(`"${date}","${s.name}",${duration},${effort},${exerciseCount}`);
+  });
+
+  return lines.join('\n');
+}
+
+export function exportExerciseLogsAsCSV(): string {
+  const sessions = loadSessions().filter(s => s.completedAt);
+  const lines: string[] = ['Date,Workout,Exercise,Weight (lb),Reps,Duration (s)'];
+
+  sessions.forEach(s => {
+    const date = new Date(s.completedAt!).toLocaleDateString();
+    s.exercises.forEach(ex => {
+      const weight = ex.weight || '';
+      const reps = ex.reps || '';
+      const duration = ex.duration || '';
+      lines.push(`"${date}","${s.name}","${ex.exerciseId}",${weight},${reps},${duration}`);
+    });
+  });
+
+  return lines.join('\n');
 }

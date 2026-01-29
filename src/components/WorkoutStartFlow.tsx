@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { WorkoutBlock, SavedWorkout } from '../types';
 import { getLastWorkout, loadSavedWorkouts } from '../data/storage';
-import { getExerciseById } from '../data/exercises';
 
 interface WorkoutStartFlowProps {
   onStartLastWorkout: (blocks: WorkoutBlock[]) => void;
@@ -36,84 +35,71 @@ export function WorkoutStartFlow({
     return blocks.reduce((acc, b) => acc + b.exercises.length, 0);
   };
 
-  const getExerciseNames = (blocks: WorkoutBlock[], limit = 3) => {
-    const names: string[] = [];
-    for (const block of blocks) {
-      for (const ex of block.exercises) {
-        const exercise = getExerciseById(ex.exerciseId);
-        if (exercise && names.length < limit) {
-          names.push(exercise.name);
-        }
-      }
-    }
-    return names;
-  };
-
   return (
-    <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top bg-slate-100 dark:bg-slate-950">
-      <header className="mb-8">
-        <div className="flex items-center gap-3">
-          <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Start Workout</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Choose how to begin</p>
-          </div>
+    <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
+      {/* Header */}
+      <header className="px-4 pt-16 pb-6 safe-top">
+        <div className="flex items-center gap-2">
+          <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+          <img src="/workout.svg" alt="Workout" className="h-5 dark:invert" />
         </div>
       </header>
 
-      <div className="space-y-4">
-        {/* Last Workout */}
-        {lastWorkout && (
-          <button
-            onClick={() => onStartLastWorkout(lastWorkout.blocks)}
-            className="w-full p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 dark:from-emerald-600/20 dark:to-emerald-600/5 border border-emerald-500/30 dark:border-emerald-600/30 text-left hover:from-emerald-500/30 dark:hover:from-emerald-600/30 transition-all active:scale-[0.98]"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-1">
-                  Repeat Last Workout
-                </div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  {getExerciseCount(lastWorkout.blocks)} exercises
-                </div>
-                <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {getExerciseNames(lastWorkout.blocks).join(', ')}
-                  {getExerciseCount(lastWorkout.blocks) > 3 && '...'}
-                </div>
-                <div className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-                  {formatTimeAgo(lastWorkout.completedAt)}
-                </div>
-              </div>
-              <svg className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
-          </button>
-        )}
-
-        {/* Create New */}
+      {/* Hero Start Button */}
+      <div className="px-4 mb-10">
         <button
           onClick={onCreateNew}
-          className="w-full p-5 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-[0.98] shadow-sm dark:shadow-none"
+          className="w-full py-6 transition-all active:scale-[0.98]"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New Workout</div>
-              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Pick exercises for each block
-              </div>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-24 h-24 rounded-full bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center hover:bg-emerald-600 dark:hover:bg-emerald-700 transition-colors">
+              <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
             </div>
-            <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <div className="text-center">
+              <div className="text-xl font-semibold text-slate-900 dark:text-slate-100">Create New Workout</div>
+              <div className="text-slate-500 dark:text-slate-400 text-sm mt-1">Pick exercises for each block</div>
+            </div>
           </div>
         </button>
+      </div>
 
-        {/* Saved Workouts Section */}
+      {/* Quick Actions */}
+      <div className="px-4 space-y-6">
+        {/* Repeat Last */}
+        {lastWorkout && (
+          <div>
+            <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Quick Start</h2>
+            <button
+              onClick={() => onStartLastWorkout(lastWorkout.blocks)}
+              className="w-full p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left hover:border-emerald-300 dark:hover:border-emerald-700 transition-all active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 dark:text-slate-100">Repeat Last Workout</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400 truncate">
+                    {getExerciseCount(lastWorkout.blocks)} exercises • {formatTimeAgo(lastWorkout.completedAt)}
+                  </div>
+                </div>
+                <svg className="w-5 h-5 text-slate-300 dark:text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Saved Workouts */}
         {savedWorkouts.length > 0 && (
-          <div className="mt-8">
+          <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">My Workouts</h2>
+              <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Saved Workouts</h2>
               <button
                 onClick={onManageLibrary}
                 className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300"
@@ -121,28 +107,37 @@ export function WorkoutStartFlow({
                 Manage
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {savedWorkouts.slice(0, 5).map(workout => (
                 <button
                   key={workout.id}
                   onClick={() => onStartSavedWorkout(workout)}
-                  className="w-full p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-[0.98] shadow-sm dark:shadow-none"
+                  className="w-full p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left hover:border-emerald-300 dark:hover:border-emerald-700 transition-all active:scale-[0.99]"
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium text-slate-900 dark:text-slate-100">{workout.name}</div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                         {getExerciseCount(workout.blocks)} exercises
                         {workout.estimatedMinutes && ` • ~${workout.estimatedMinutes} min`}
                       </div>
                     </div>
-                    <svg className="w-5 h-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                   </div>
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Empty state when no workouts saved */}
+        {savedWorkouts.length === 0 && !lastWorkout && (
+          <div className="text-center py-8">
+            <p className="text-slate-500 dark:text-slate-400">
+              Create your first workout to get started!
+            </p>
           </div>
         )}
       </div>

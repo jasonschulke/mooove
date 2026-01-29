@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
-import type { SavedWorkout, WorkoutBlock, Exercise, MuscleArea } from '../types';
-import { loadSavedWorkouts, deleteSavedWorkout, addSavedWorkout, updateSavedWorkout, loadCustomExercises, deleteCustomExercise, getLastWeekAverages } from '../data/storage';
+import type { SavedWorkout, WorkoutBlock, Exercise, MuscleArea, WorkoutSession } from '../types';
+import { loadSavedWorkouts, deleteSavedWorkout, addSavedWorkout, updateSavedWorkout, loadCustomExercises, deleteCustomExercise, getLastWeekAverages, loadFavorites, toggleFavoriteWorkout, toggleFavoriteExercise, getExerciseDescription, setExerciseDescription, clearExerciseDescription, loadSessions, deleteSession } from '../data/storage';
 import { getAllExercises, getExerciseById } from '../data/exercises';
 import { Button } from '../components/Button';
 import { WorkoutBuilder } from '../components/WorkoutBuilder';
@@ -9,10 +9,11 @@ interface LibraryPageProps {
   onStartWorkout: (blocks: WorkoutBlock[]) => void;
 }
 
-type TabType = 'workouts' | 'exercises';
+type TabType = 'workouts' | 'exercises' | 'history';
 
-const AREA_FILTERS: { value: MuscleArea | 'all'; label: string }[] = [
+const AREA_FILTERS: { value: MuscleArea | 'all' | 'favorites'; label: string }[] = [
   { value: 'all', label: 'All' },
+  { value: 'favorites', label: 'Favorites' },
   { value: 'warmup', label: 'Warmup' },
   { value: 'squat', label: 'Squat' },
   { value: 'hinge', label: 'Hinge' },
@@ -35,13 +36,81 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   const [workoutName, setWorkoutName] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Exercises state
-  const [filter, setFilter] = useState<MuscleArea | 'all'>('all');
+  const [filter, setFilter] = useState<MuscleArea | 'all' | 'favorites'>('all');
   const [search, setSearch] = useState('');
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [customExercises, setCustomExercises] = useState(() => loadCustomExercises());
   const [showExerciseDeleteConfirm, setShowExerciseDeleteConfirm] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState(() => loadFavorites());
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  // History state
+  const [sessions, setSessions] = useState(() => loadSessions().filter(s => s.completedAt));
+  const [selectedSession, setSelectedSession] = useState<WorkoutSession | null>(null);
+
+  // History swipe to delete state
+  const [swipingSession, setSwipingSession] = useState<string | null>(null);
+  const historySwipeStartX = useRef(0);
+  const historySwipeStartY = useRef(0);
+  const historySwipeOffsetRef = useRef(0);
+  const historySwipeElementRef = useRef<HTMLDivElement | null>(null);
+  const historySwipeActive = useRef(false);
+
+  const handleHistoryTouchStart = (e: React.TouchEvent, sessionId: string, element: HTMLDivElement | null) => {
+    historySwipeStartX.current = e.touches[0].clientX;
+    historySwipeStartY.current = e.touches[0].clientY;
+    historySwipeOffsetRef.current = 0;
+    historySwipeElementRef.current = element;
+    setSwipingSession(sessionId);
+    historySwipeActive.current = false;
+    if (element) {
+      element.style.transition = 'none';
+    }
+  };
+
+  const handleHistoryTouchMove = (e: React.TouchEvent) => {
+    if (!swipingSession || !historySwipeElementRef.current) return;
+    const diffX = historySwipeStartX.current - e.touches[0].clientX;
+    const diffY = Math.abs(e.touches[0].clientY - historySwipeStartY.current);
+
+    if (!historySwipeActive.current && Math.abs(diffX) > 10) {
+      historySwipeActive.current = diffX > diffY * 2;
+    }
+
+    if (historySwipeActive.current) {
+      const offset = Math.max(0, Math.min(diffX, 120));
+      historySwipeOffsetRef.current = offset;
+      historySwipeElementRef.current.style.transform = `translateX(-${offset}px)`;
+    }
+  };
+
+  const handleHistoryTouchEnd = () => {
+    if (!swipingSession) return;
+    const element = historySwipeElementRef.current;
+    if (element) {
+      element.style.transition = 'transform 0.2s ease-out';
+      if (historySwipeActive.current && historySwipeOffsetRef.current >= swipeThreshold) {
+        element.style.transform = 'translateX(-100%)';
+        setTimeout(() => {
+          deleteSession(swipingSession);
+          setSessions(loadSessions().filter(s => s.completedAt));
+        }, 200);
+      } else {
+        element.style.transform = 'translateX(0)';
+      }
+    }
+    setSwipingSession(null);
+    historySwipeActive.current = false;
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    deleteSession(sessionId);
+    setSessions(loadSessions().filter(s => s.completedAt));
+    setSelectedSession(null);
+  };
 
   // Inline editing state
   const [addingToBlock, setAddingToBlock] = useState<number | null>(null);
@@ -131,6 +200,18 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
 
   const refreshCustomExercises = () => {
     setCustomExercises(loadCustomExercises());
+  };
+
+  const handleToggleFavoriteWorkout = (workoutId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleFavoriteWorkout(workoutId);
+    setFavorites(loadFavorites());
+  };
+
+  const handleToggleFavoriteExercise = (exerciseId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleFavoriteExercise(exerciseId);
+    setFavorites(loadFavorites());
   };
 
   // Inline editing helpers
@@ -307,27 +388,36 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   };
 
   const handleSaveWorkout = () => {
-    if (!savingBlocks || !workoutName.trim()) return;
+    if (!savingBlocks || !workoutName.trim() || isSaving) return;
 
-    if (editingWorkout) {
-      updateSavedWorkout(editingWorkout.id, {
-        name: workoutName.trim(),
-        estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : undefined,
-        blocks: savingBlocks,
-      });
-    } else {
-      addSavedWorkout({
-        name: workoutName.trim(),
-        estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : undefined,
-        blocks: savingBlocks,
-      });
+    setIsSaving(true);
+
+    try {
+      if (editingWorkout) {
+        updateSavedWorkout(editingWorkout.id, {
+          name: workoutName.trim(),
+          estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : undefined,
+          blocks: savingBlocks,
+        });
+      } else {
+        addSavedWorkout({
+          name: workoutName.trim(),
+          estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : undefined,
+          blocks: savingBlocks,
+        });
+      }
+
+      // Refresh workouts list first
+      setWorkouts(loadSavedWorkouts());
+
+      // Clear form state to return to main view
+      setSavingBlocks(null);
+      setEditingWorkout(null);
+      setWorkoutName('');
+      setEstimatedMinutes('');
+    } finally {
+      setIsSaving(false);
     }
-
-    refreshWorkouts();
-    setSavingBlocks(null);
-    setEditingWorkout(null);
-    setWorkoutName('');
-    setEstimatedMinutes('');
   };
 
   const handleEditWorkout = (workout: SavedWorkout) => {
@@ -351,13 +441,20 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
 
   const filteredExercises = useMemo(() => {
     return exercises.filter(e => {
-      const matchesArea = filter === 'all' || e.area === filter;
+      const matchesFavorites = filter !== 'favorites' || favorites.exercises.includes(e.id);
+      const matchesArea = filter === 'all' || filter === 'favorites' || e.area === filter;
       const matchesSearch = search === '' ||
         e.name.toLowerCase().includes(search.toLowerCase()) ||
         e.equipment.toLowerCase().includes(search.toLowerCase());
-      return matchesArea && matchesSearch;
+      return matchesFavorites && matchesArea && matchesSearch;
     });
-  }, [exercises, filter, search]);
+  }, [exercises, filter, search, favorites.exercises]);
+
+  // Filter workouts by favorites if showFavoritesOnly is true
+  const displayedWorkouts = useMemo(() => {
+    if (!showFavoritesOnly) return workouts;
+    return workouts.filter(w => favorites.workouts.includes(w.id));
+  }, [workouts, showFavoritesOnly, favorites.workouts]);
 
   const groupedByArea = useMemo(() => {
     const groups: Record<string, Exercise[]> = {};
@@ -384,9 +481,9 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
       <div className="min-h-screen flex flex-col px-4 pt-16 pb-24 safe-top bg-slate-100 dark:bg-slate-950">
         <header className="mb-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            <div className="flex items-center gap-2">
+              <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 {editingWorkout ? 'Edit Workout' : 'Save Workout'}
               </h1>
             </div>
@@ -654,10 +751,10 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
             variant="primary"
             size="lg"
             onClick={handleSaveWorkout}
-            disabled={!workoutName.trim()}
+            disabled={!workoutName.trim() || isSaving}
             className="w-full"
           >
-            {editingWorkout ? 'Save Changes' : 'Save to Library'}
+            {isSaving ? 'Saving...' : editingWorkout ? 'Save Changes' : 'Save to Library'}
           </Button>
         </div>
       </div>
@@ -668,6 +765,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   if (selectedExercise) {
     const averages = getLastWeekAverages(selectedExercise.id);
     const isCustom = selectedExercise.id.startsWith('custom-');
+    const customDescription = getExerciseDescription(selectedExercise.id);
 
     return (
       <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
@@ -699,12 +797,21 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
             </span>
           </div>
 
-          {selectedExercise.description && (
-            <div className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Description</h3>
-              <p className="text-slate-700 dark:text-slate-200">{selectedExercise.description}</p>
-            </div>
-          )}
+          {/* Editable Description */}
+          <EditableDescription
+            defaultDescription={selectedExercise.description}
+            customDescription={customDescription}
+            onSave={(desc) => {
+              setExerciseDescription(selectedExercise.id, desc);
+              // Force re-render
+              setSelectedExercise({ ...selectedExercise });
+            }}
+            onReset={() => {
+              clearExerciseDescription(selectedExercise.id);
+              // Force re-render
+              setSelectedExercise({ ...selectedExercise });
+            }}
+          />
 
           <div className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
             <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">Defaults</h3>
@@ -820,9 +927,9 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   return (
     <div className="min-h-screen pb-24 bg-slate-100 dark:bg-slate-950">
       <header className="px-4 pt-16 pb-4 safe-top">
-        <div className="flex items-center gap-3">
-          <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Library</h1>
+        <div className="flex items-center gap-2">
+          <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+          <img src="/library.svg" alt="Library" className="h-5 dark:invert" />
         </div>
       </header>
 
@@ -837,7 +944,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Workouts ({workouts.length})
+            Workouts
           </button>
           <button
             onClick={() => setActiveTab('exercises')}
@@ -847,7 +954,17 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Exercises ({exercises.length})
+            Exercises
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'history'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            History
           </button>
         </div>
       </div>
@@ -859,12 +976,27 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
             variant="primary"
             size="lg"
             onClick={handleCreateNew}
-            className="w-full mb-6"
+            className="w-full mb-4"
           >
             Create New Workout
           </Button>
 
-          {workouts.length === 0 ? (
+          {/* Favorites filter for workouts */}
+          <button
+            onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+            className={`mb-4 flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+              showFavoritesOnly
+                ? 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            <svg className={`w-4 h-4 ${showFavoritesOnly ? 'fill-current' : ''}`} fill={showFavoritesOnly ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+            <span className="text-sm font-medium">Favorites Only</span>
+          </button>
+
+          {displayedWorkouts.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
                 <svg className="w-8 h-8 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -878,7 +1010,9 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {workouts.map(workout => (
+              {displayedWorkouts.map(workout => {
+                const isFavorite = favorites.workouts.includes(workout.id);
+                return (
                 <div
                   key={workout.id}
                   className="p-5 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm"
@@ -922,6 +1056,18 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                             )}
                           </div>
                         </div>
+                        <button
+                          onClick={(e) => handleToggleFavoriteWorkout(workout.id, e)}
+                          className={`p-1.5 rounded-full transition-colors ${
+                            isFavorite
+                              ? 'text-pink-500 hover:text-pink-600'
+                              : 'text-slate-300 dark:text-slate-600 hover:text-pink-400 dark:hover:text-pink-400'
+                          }`}
+                        >
+                          <svg className="w-6 h-6" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        </button>
                       </div>
                       <div className="flex gap-3">
                         <Button
@@ -949,7 +1095,8 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                     </>
                   )}
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
@@ -1007,6 +1154,8 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                         key={exercise.id}
                         exercise={exercise}
                         onClick={() => setSelectedExercise(exercise)}
+                        isFavorite={favorites.exercises.includes(exercise.id)}
+                        onToggleFavorite={(e) => handleToggleFavoriteExercise(exercise.id, e)}
                       />
                     ))}
                   </div>
@@ -1019,6 +1168,8 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                     key={exercise.id}
                     exercise={exercise}
                     onClick={() => setSelectedExercise(exercise)}
+                    isFavorite={favorites.exercises.includes(exercise.id)}
+                    onToggleFavorite={(e) => handleToggleFavoriteExercise(exercise.id, e)}
                   />
                 ))}
               </div>
@@ -1032,11 +1183,233 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
           </div>
         </div>
       )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && (
+        selectedSession ? (
+          <div className="px-4">
+            <button
+              onClick={() => setSelectedSession(null)}
+              className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-4"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to History
+            </button>
+
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm mb-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedSession.name}</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    {new Date(selectedSession.completedAt!).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </div>
+                {selectedSession.overallEffort && (
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+                    Effort: {selectedSession.overallEffort}/10
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 mb-4">
+                <span className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium">
+                  {selectedSession.exercises.length} exercises
+                </span>
+                {selectedSession.totalDuration && (
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-medium">
+                    {Math.round(selectedSession.totalDuration / 60)} min
+                  </span>
+                )}
+              </div>
+
+              {/* Repeat workout button */}
+              {selectedSession.blocks && selectedSession.blocks.length > 0 && (
+                <Button
+                  variant="primary"
+                  onClick={() => onStartWorkout(selectedSession.blocks)}
+                  className="w-full"
+                >
+                  Repeat This Workout
+                </Button>
+              )}
+            </div>
+
+            {/* Workout Structure with Blocks > Exercises */}
+            {selectedSession.blocks && selectedSession.blocks.length > 0 ? (
+              <div className="space-y-4">
+                {selectedSession.blocks.map((block, blockIdx) => (
+                  <div key={blockIdx} className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                      {block.name}
+                    </h4>
+                    <div className="space-y-2">
+                      {block.exercises.map((workoutExercise, exIdx) => {
+                        const exercise = getExerciseById(workoutExercise.exerciseId);
+                        const log = selectedSession.exercises.find(l => l.exerciseId === workoutExercise.exerciseId);
+                        return (
+                          <div
+                            key={exIdx}
+                            className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-800"
+                          >
+                            <div className="flex items-center gap-2">
+                              {workoutExercise.sets && (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                  {workoutExercise.sets}
+                                </span>
+                              )}
+                              <span className="font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                {exercise?.name || workoutExercise.exerciseId}
+                              </span>
+                            </div>
+                            <span className="text-sm text-slate-500 dark:text-slate-400 tabular-nums">
+                              {log?.weight && `${log.weight}lb`}
+                              {log?.weight && log?.reps && ' × '}
+                              {log?.reps || workoutExercise.reps}
+                              {(log?.duration || workoutExercise.duration) && `${log?.duration || workoutExercise.duration}s`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : selectedSession.exercises.length > 0 ? (
+              /* Fallback for sessions without blocks */
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3">Exercises Logged</h4>
+                {selectedSession.exercises.map((log, idx) => {
+                  const exercise = getExerciseById(log.exerciseId);
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
+                    >
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {exercise?.name || log.exerciseId}
+                      </span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400 tabular-nums">
+                        {log.weight && `${log.weight}lb`}
+                        {log.weight && log.reps && ' × '}
+                        {log.reps && `${log.reps}`}
+                        {log.duration && `${log.duration}s`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {/* Delete button */}
+            <div className="mt-6">
+              <Button
+                variant="ghost"
+                onClick={() => handleDeleteSession(selectedSession.id)}
+                className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                Delete This Workout
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-4">
+            {sessions.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="text-slate-500 dark:text-slate-400">No workout history yet</div>
+                <div className="text-sm text-slate-400 dark:text-slate-500 mt-1">
+                  Complete a workout to see it here
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {sessions.map(session => {
+                  const dateStr = new Date(session.completedAt!).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                  const timeStr = new Date(session.completedAt!).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  });
+
+                  return (
+                    <div key={session.id} className="relative overflow-hidden rounded-2xl">
+                      {/* Delete background */}
+                      <div className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-end pr-4">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </div>
+                      <div
+                        ref={el => { if (swipingSession === session.id) historySwipeElementRef.current = el; }}
+                        onTouchStart={(e) => handleHistoryTouchStart(e, session.id, e.currentTarget)}
+                        onTouchMove={handleHistoryTouchMove}
+                        onTouchEnd={handleHistoryTouchEnd}
+                        className="relative"
+                      >
+                        <button
+                          onClick={() => setSelectedSession(session)}
+                          className="w-full p-5 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:scale-[0.99]"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{session.name}</h3>
+                              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                {dateStr} at {timeStr}
+                              </p>
+                            </div>
+                            <svg className="w-5 h-5 text-slate-400 dark:text-slate-500 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+                              {session.exercises.length} exercises
+                            </span>
+                            {session.totalDuration && (
+                              <span className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium">
+                                {Math.round(session.totalDuration / 60)} min
+                              </span>
+                            )}
+                            {session.overallEffort && (
+                              <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-medium">
+                                Effort: {session.overallEffort}/10
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )
+      )}
     </div>
   );
 }
 
-function ExerciseCard({ exercise, onClick }: { exercise: Exercise; onClick: () => void }) {
+function ExerciseCard({ exercise, onClick, isFavorite, onToggleFavorite }: {
+  exercise: Exercise;
+  onClick: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (e: React.MouseEvent) => void;
+}) {
   const isCustom = exercise.id.startsWith('custom-');
   const equipmentLabel = exercise.equipment.charAt(0).toUpperCase() + exercise.equipment.slice(1).replace('-', ' ');
 
@@ -1045,10 +1418,24 @@ function ExerciseCard({ exercise, onClick }: { exercise: Exercise; onClick: () =
       onClick={onClick}
       className="w-full p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:scale-[0.98]"
     >
-      <div className="flex justify-between items-start">
+      <div className="flex justify-between items-center">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-slate-900 dark:text-slate-100">{exercise.name}</span>
+            {onToggleFavorite && (
+              <button
+                onClick={onToggleFavorite}
+                className={`p-0.5 rounded-full transition-colors ${
+                  isFavorite
+                    ? 'text-pink-500 hover:text-pink-600'
+                    : 'text-slate-300 dark:text-slate-600 hover:text-pink-400 dark:hover:text-pink-400'
+                }`}
+              >
+                <svg className="w-4 h-4" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </button>
+            )}
             {isCustom && (
               <span className="px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-600/20 text-purple-700 dark:text-purple-400 text-[10px] font-medium">
                 Custom
@@ -1076,10 +1463,105 @@ function ExerciseCard({ exercise, onClick }: { exercise: Exercise; onClick: () =
             )}
           </div>
         </div>
-        <svg className="w-5 h-5 text-slate-400 dark:text-slate-500 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-slate-400 dark:text-slate-500 ml-3 flex-shrink-0 self-center" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </div>
     </button>
+  );
+}
+
+function EditableDescription({
+  defaultDescription,
+  customDescription,
+  onSave,
+  onReset,
+}: {
+  defaultDescription?: string;
+  customDescription?: string;
+  onSave: (description: string) => void;
+  onReset: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(customDescription || defaultDescription || '');
+
+  const displayDescription = customDescription || defaultDescription;
+  const hasCustom = !!customDescription;
+
+  const handleSave = () => {
+    if (editValue.trim()) {
+      onSave(editValue.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleReset = () => {
+    onReset();
+    setEditValue(defaultDescription || '');
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <div className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
+        <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Edit Description</h3>
+        <textarea
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500 resize-none"
+          rows={4}
+          placeholder="Add a description..."
+          autoFocus
+        />
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => { setIsEditing(false); setEditValue(customDescription || defaultDescription || ''); }}
+            className="flex-1 px-3 py-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-600 text-white"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Description</h3>
+        <div className="flex items-center gap-2">
+          {hasCustom && (
+            <button
+              onClick={handleReset}
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+            >
+              Reset to default
+            </button>
+          )}
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500"
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+      {displayDescription ? (
+        <p className="text-slate-700 dark:text-slate-200">{displayDescription}</p>
+      ) : (
+        <p className="text-slate-400 dark:text-slate-500 italic">No description. Tap "Edit" to add one.</p>
+      )}
+      {hasCustom && (
+        <span className="inline-block mt-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs">
+          Custom
+        </span>
+      )}
+    </div>
   );
 }

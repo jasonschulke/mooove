@@ -188,9 +188,9 @@ export function ClaudeChat() {
     return (
       <div className="min-h-screen pb-20 flex flex-col bg-slate-100 dark:bg-slate-950">
         <header className="px-4 pt-16 pb-4 safe-top">
-          <div className="flex items-center gap-3">
-            <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chat</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+            <img src="/chat.svg" alt="Chat" className="h-5 dark:invert" />
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center p-8">
@@ -213,11 +213,11 @@ export function ClaudeChat() {
   return (
     <div className="min-h-screen pb-20 flex flex-col bg-slate-100 dark:bg-slate-950">
       {/* Header */}
-      <header className="px-4 pt-16 pb-3 safe-top border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <header className="px-4 pt-16 pb-4 safe-top">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/logo_icon.png" alt="Moove" className="h-10 dark:invert" />
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chat</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
+            <img src="/chat.svg" alt="Chat" className="h-5 dark:invert" />
           </div>
           <button
             onClick={clearChat}
@@ -246,19 +246,19 @@ export function ClaudeChat() {
             </p>
             <div className="mt-6 space-y-2">
               {[
-                'Add a barbell back squat exercise',
-                'What exercises target the posterior chain?',
-                'Create a 20-minute HIIT workout',
-                'How do I improve my deadlift form?',
-                'Add a kettlebell turkish get-up',
-                'What\'s the best warm-up before lifting?',
-              ].map((prompt, i) => (
+                { prompt: 'Add a barbell back squat exercise', color: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/30' },
+                { prompt: 'What exercises target the posterior chain?', color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/30' },
+                { prompt: 'Create a 20-minute HIIT workout', color: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/30' },
+                { prompt: 'How do I improve my deadlift form?', color: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/30' },
+                { prompt: 'Add a kettlebell turkish get-up', color: 'bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/30' },
+                { prompt: 'What\'s the best warm-up before lifting?', color: 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800/30' },
+              ].map((item, i) => (
                 <button
                   key={i}
-                  onClick={() => setInput(prompt)}
-                  className="block w-full max-w-xs mx-auto px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-left"
+                  onClick={() => setInput(item.prompt)}
+                  className={`block w-full max-w-xs mx-auto px-4 py-2 rounded-lg border text-slate-600 dark:text-slate-300 text-sm hover:opacity-80 text-left ${item.color}`}
                 >
-                  "{prompt}"
+                  "{item.prompt}"
                 </button>
               ))}
             </div>
@@ -309,23 +309,23 @@ export function ClaudeChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-4 py-4 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-800">
-        <div className="flex gap-3">
+      {/* Input - Fixed at bottom above tab bar */}
+      <div className="px-4 py-3 bg-slate-100 dark:bg-slate-950 safe-bottom">
+        <div className="flex gap-3 items-end">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about exercises, workouts..."
-            rows={1}
-            className="flex-1 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none"
+            rows={2}
+            className="flex-1 px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none min-h-[60px]"
           />
           <Button
             variant="primary"
             onClick={sendMessage}
             disabled={!input.trim() || isLoading}
-            className="px-4"
+            className="px-4 h-[60px]"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

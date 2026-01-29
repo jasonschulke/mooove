@@ -33,15 +33,15 @@ function createSmoothPath(points: { x: number; y: number }[]): string {
 export function EffortChart({ data }: EffortChartProps) {
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-slate-400 dark:text-slate-500 text-sm">
+      <div className="flex items-center justify-center h-16 text-slate-400 dark:text-slate-500 text-sm">
         Complete workouts with effort ratings to see trends
       </div>
     );
   }
 
   const width = 300;
-  const height = 140;
-  const padding = { top: 10, right: 10, bottom: 25, left: 28 };
+  const height = 90;
+  const padding = { top: 6, right: 10, bottom: 18, left: 22 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
@@ -65,8 +65,8 @@ export function EffortChart({ data }: EffortChartProps) {
     ? `${linePath} L ${xScale(data.length - 1)} ${padding.top + chartHeight} L ${xScale(0)} ${padding.top + chartHeight} Z`
     : '';
 
-  // Y-axis labels - show 1 through 10
-  const yLabels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  // Y-axis labels - show only key values for compact chart
+  const yLabels = [1, 5, 10];
 
   // Get effort color
   const getEffortColor = (effort: number) => {
@@ -140,10 +140,10 @@ export function EffortChart({ data }: EffortChartProps) {
             key={i}
             cx={xScale(i)}
             cy={yScale(d.effort)}
-            r="4"
+            r="3"
             fill={getEffortColor(d.effort)}
             className="stroke-white dark:stroke-slate-800"
-            strokeWidth="2"
+            strokeWidth="1.5"
           />
         ))}
 

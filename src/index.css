@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-slate-950: #020617;
   --color-slate-900: #0f172a;
@@ -95,4 +97,20 @@ body {
 
 .animate-logo-grow {
   animation: logo-grow 2s ease-out forwards;
+}
+
+/* Subtle slow pulse for workout button */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 10px 15px -3px rgb(16 185 129 / 0.3), 0 4px 6px -4px rgb(16 185 129 / 0.3);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: 0 10px 15px -3px rgb(16 185 129 / 0.5), 0 4px 6px -4px rgb(16 185 129 / 0.5);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
 }
