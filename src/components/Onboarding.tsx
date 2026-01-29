@@ -52,6 +52,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPersonality, setSelectedPersonality] = useState<PersonalityType>('encouraging');
   const { signInWithEmail, isConfigured } = useAuth();
@@ -72,9 +73,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     // Send magic link when leaving welcome step if email was entered
     if (isWelcomeStep && userEmail.trim() && isConfigured && !emailSent) {
       setIsLoading(true);
+      setEmailError(null);
       const { error } = await signInWithEmail(userEmail.trim());
       setIsLoading(false);
-      if (!error) {
+      if (error) {
+        setEmailError(error.message);
+        // Still continue to next step even if email fails
+      } else {
         setEmailSent(true);
       }
     }
@@ -152,6 +157,18 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span>Check your email to complete sign in</span>
+            </div>
+          </div>
+        )}
+
+        {/* Email error banner */}
+        {emailError && !isWelcomeStep && (
+          <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <div className="flex items-center gap-2 text-red-700 dark:text-red-400 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{emailError}</span>
             </div>
           </div>
         )}
