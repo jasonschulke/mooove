@@ -12,6 +12,7 @@ interface AuthContextType {
   syncStatus: SyncStatus;
   isConfigured: boolean;
   signInWithEmail: (email: string) => Promise<{ error: AuthError | null }>;
+  verifyOtp: (email: string, token: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   setSyncStatus: (status: SyncStatus) => void;
 }
@@ -97,11 +98,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setError(null);
+    // Send OTP code (not magic link) by omitting emailRedirectTo
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+    });
+
+    if (error) {
+      setError(error);
+    }
+
+    return { error };
+  }, []);
+
+  const verifyOtp = useCallback(async (email: string, token: string) => {
+    if (!supabase) {
+      return { error: { message: 'Supabase not configured' } as AuthError };
+    }
+
+    setError(null);
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
     });
 
     if (error) {
@@ -128,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     syncStatus,
     isConfigured,
     signInWithEmail,
+    verifyOtp,
     signOut,
     setSyncStatus,
   };

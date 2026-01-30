@@ -131,7 +131,7 @@ export function NavBar({ currentPage, onNavigate, hasActiveWorkout, workoutType,
           <div className={`absolute -top-7 flex items-center justify-center shadow-lg transition-all rounded-full ${
             hasActiveWorkout
               ? 'shadow-emerald-500/40'
-              : 'shadow-emerald-500/30'
+              : 'shadow-slate-500/30'
           }`}>
             {hasActiveWorkout && workoutProgress !== undefined ? (
               <ProgressRing progress={workoutProgress}>
@@ -140,7 +140,9 @@ export function NavBar({ currentPage, onNavigate, hasActiveWorkout, workoutType,
                 </div>
               </ProgressRing>
             ) : (
-              <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center ring-4 ring-slate-200 dark:ring-slate-900">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center ring-4 ring-slate-200 dark:ring-slate-900 ${
+                hasActiveWorkout ? 'bg-emerald-500' : 'bg-slate-700'
+              }`}>
                 {hasActiveWorkout ? (
                   <WorkoutIcon type={workoutType ?? null} />
                 ) : (

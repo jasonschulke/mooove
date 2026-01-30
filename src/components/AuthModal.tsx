@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './Button';
 
@@ -7,36 +7,106 @@ interface AuthModalProps {
   onClose: () => void;
 }
 
-type AuthStep = 'email' | 'check-email' | 'error';
+type AuthStep = 'email' | 'enter-code' | 'success' | 'error';
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
-  const { signInWithEmail, error } = useAuth();
+  const { signInWithEmail, verifyOtp, error } = useAuth();
   const [email, setEmail] = useState('');
+  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
   const [step, setStep] = useState<AuthStep>('email');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Focus first OTP input when entering code step
+  useEffect(() => {
+    if (step === 'enter-code' && inputRefs.current[0]) {
+      inputRefs.current[0].focus();
+    }
+  }, [step]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
 
     setIsLoading(true);
+    setErrorMessage(null);
     const { error } = await signInWithEmail(email.trim());
     setIsLoading(false);
 
     if (error) {
+      setErrorMessage(error.message);
       setStep('error');
     } else {
-      setStep('check-email');
+      setStep('enter-code');
+    }
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    // Only allow digits
+    if (value && !/^\d$/.test(value)) return;
+
+    const newOtp = [...otpCode];
+    newOtp[index] = value;
+    setOtpCode(newOtp);
+
+    // Auto-advance to next input
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-submit when all 6 digits entered
+    if (value && index === 5 && newOtp.every(d => d)) {
+      handleVerifyCode(newOtp.join(''));
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      const newOtp = pasted.split('');
+      setOtpCode(newOtp);
+      handleVerifyCode(pasted);
+    }
+  };
+
+  const handleVerifyCode = async (code: string) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    const { error } = await verifyOtp(email.trim(), code);
+    setIsLoading(false);
+
+    if (error) {
+      setErrorMessage(error.message);
+      setOtpCode(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } else {
+      setStep('success');
+      // Auto-close after success
+      setTimeout(() => {
+        handleClose();
+      }, 1500);
     }
   };
 
   const handleClose = () => {
     setEmail('');
+    setOtpCode(['', '', '', '', '', '']);
     setStep('email');
+    setErrorMessage(null);
     onClose();
   };
 
   const handleTryAgain = () => {
+    setOtpCode(['', '', '', '', '', '']);
+    setErrorMessage(null);
     setStep('email');
   };
 
@@ -67,7 +137,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 Sign in to Moove
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                We'll send you a magic link to sign in instantly. No password needed.
+                We'll send you a 6-digit code to sign in. No password needed.
               </p>
             </div>
 
@@ -96,14 +166,69 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     Sending...
                   </span>
                 ) : (
-                  'Send Magic Link'
+                  'Send Code'
                 )}
               </Button>
             </form>
           </>
         )}
 
-        {step === 'check-email' && (
+        {step === 'enter-code' && (
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <svg className="w-8 h-8 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+              Enter your code
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+              We sent a 6-digit code to <strong className="text-slate-700 dark:text-slate-300">{email}</strong>
+            </p>
+
+            {/* OTP Input */}
+            <div className="flex justify-center gap-2 mb-4" onPaste={handleOtpPaste}>
+              {otpCode.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={el => inputRefs.current[index] = el}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(index, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                  disabled={isLoading}
+                  className="w-11 h-14 text-center text-2xl font-bold rounded-xl bg-slate-100 dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              ))}
+            </div>
+
+            {errorMessage && (
+              <p className="text-sm text-red-500 mb-4">{errorMessage}</p>
+            )}
+
+            {isLoading && (
+              <div className="flex items-center justify-center gap-2 text-slate-500 mb-4">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Verifying...
+              </div>
+            )}
+
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+              Didn't receive it? Check your spam folder.
+            </p>
+            <Button variant="secondary" onClick={handleTryAgain} className="w-full">
+              Use different email
+            </Button>
+          </div>
+        )}
+
+        {step === 'success' && (
           <div className="text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
               <svg className="w-8 h-8 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,22 +236,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </svg>
             </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-              Check your email
+              You're signed in!
             </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-              We sent a magic link to <strong className="text-slate-700 dark:text-slate-300">{email}</strong>. Click the link to sign in.
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Your workouts will now sync across devices.
             </p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mb-6">
-              Didn't receive it? Check your spam folder or try again.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="secondary" onClick={handleTryAgain} className="flex-1">
-                Try Again
-              </Button>
-              <Button variant="primary" onClick={handleClose} className="flex-1">
-                Done
-              </Button>
-            </div>
           </div>
         )}
 
@@ -141,7 +255,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               Something went wrong
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-              {error?.message || 'Unable to send magic link. Please try again.'}
+              {errorMessage || error?.message || 'Unable to send code. Please try again.'}
             </p>
             <Button variant="primary" onClick={handleTryAgain} className="w-full">
               Try Again

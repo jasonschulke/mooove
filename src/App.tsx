@@ -104,6 +104,10 @@ function AppContent() {
     } else {
       root.classList.remove('dark');
     }
+
+    // Update browser theme-color to match app background
+    const themeColor = theme === 'dark' ? '#020617' : '#f1f5f9';
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
   }, [theme]);
 
   // Navigate to workout page only when workout first starts (not on every render)
@@ -162,13 +166,12 @@ function AppContent() {
   // Show splash screen
   if (showSplash) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <img
           src="/logo_stacked.png"
           alt="Moove"
           className="h-32 animate-logo-grow"
         />
-        <p className="mt-4 text-slate-500 text-sm font-medium tracking-wide">Moove your Bones</p>
       </div>
     );
   }
