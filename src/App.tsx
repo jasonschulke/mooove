@@ -15,6 +15,7 @@ import { useLandscape } from './hooks/useLandscape';
 import { seedDefaultWorkouts } from './data/storage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SignUpPromptProvider, useSignUpPrompt } from './contexts/SignUpPromptContext';
+import { ExerciseProvider } from './contexts/ExerciseContext';
 import { performInitialSync, setSyncStatusCallback } from './data/supabaseSync';
 import { NavBar } from './components/NavBar';
 import { WorkoutBuilder } from './components/WorkoutBuilder';
@@ -281,10 +282,12 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <SignUpPromptProvider>
-        <AppContent />
-        <UpdatePrompt />
-      </SignUpPromptProvider>
+      <ExerciseProvider>
+        <SignUpPromptProvider>
+          <AppContent />
+          <UpdatePrompt />
+        </SignUpPromptProvider>
+      </ExerciseProvider>
     </AuthProvider>
   );
 }

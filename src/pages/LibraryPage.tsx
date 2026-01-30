@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef } from 'react';
-import type { SavedWorkout, WorkoutBlock, Exercise, MuscleArea, WorkoutSession } from '../types';
+import { useState, useRef, useMemo } from 'react';
+import type { SavedWorkout, WorkoutBlock, Exercise, MuscleArea, EquipmentType, WorkoutSession } from '../types';
 import { CARDIO_TYPE_LABELS, CARDIO_TYPE_ICONS } from '../types';
-import { loadSavedWorkouts, deleteSavedWorkout, addSavedWorkout, updateSavedWorkout, loadCustomExercises, deleteCustomExercise, getLastWeekAverages, loadFavorites, toggleFavoriteWorkout, toggleFavoriteExercise, getExerciseDescription, setExerciseDescription, clearExerciseDescription, loadSessions, deleteSession } from '../data/storage';
-import { getAllExercises, getExerciseById } from '../data/exercises';
+import { loadSavedWorkouts, deleteSavedWorkout, addSavedWorkout, updateSavedWorkout, getLastWeekAverages, loadFavorites, toggleFavoriteWorkout, toggleFavoriteExercise, getExerciseDescription, setExerciseDescription, clearExerciseDescription, loadSessions, deleteSession } from '../data/storage';
+import { useExercises } from '../contexts/ExerciseContext';
 import { useSignUpPrompt } from '../contexts/SignUpPromptContext';
 import { Button } from '../components/Button';
 import { WorkoutBuilder } from '../components/WorkoutBuilder';
@@ -13,9 +13,18 @@ interface LibraryPageProps {
 
 type TabType = 'workouts' | 'exercises' | 'history';
 
-const AREA_FILTERS: { value: MuscleArea | 'all' | 'favorites'; label: string }[] = [
+type SourceFilter = 'all' | 'default' | 'custom' | 'favorites';
+type TypeFilter = 'all' | MuscleArea;
+
+const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
   { value: 'all', label: 'All' },
+  { value: 'default', label: 'Built-In' },
+  { value: 'custom', label: 'Custom' },
   { value: 'favorites', label: 'Favorites' },
+];
+
+const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
   { value: 'warmup', label: 'Warmup' },
   { value: 'squat', label: 'Squat' },
   { value: 'hinge', label: 'Hinge' },
@@ -24,11 +33,13 @@ const AREA_FILTERS: { value: MuscleArea | 'all' | 'favorites'; label: string }[]
   { value: 'pull', label: 'Pull' },
   { value: 'core', label: 'Core' },
   { value: 'conditioning', label: 'Conditioning' },
+  { value: 'cooldown', label: 'Cooldown' },
   { value: 'full-body', label: 'Full Body' },
 ];
 
 export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   const { triggerSignUpPrompt } = useSignUpPrompt();
+  const { exercises, addExercise, updateExercise, deleteExercise, getExerciseById } = useExercises();
   const [activeTab, setActiveTab] = useState<TabType>('workouts');
 
   // Workouts state
@@ -42,13 +53,23 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   const [isSaving, setIsSaving] = useState(false);
 
   // Exercises state
-  const [filter, setFilter] = useState<MuscleArea | 'all' | 'favorites'>('all');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
-  const [customExercises, setCustomExercises] = useState(() => loadCustomExercises());
   const [showExerciseDeleteConfirm, setShowExerciseDeleteConfirm] = useState<string | null>(null);
   const [favorites, setFavorites] = useState(() => loadFavorites());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  // Create/edit exercise modal state
+  const [showCreateExercise, setShowCreateExercise] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const [newExerciseName, setNewExerciseName] = useState('');
+  const [newExerciseArea, setNewExerciseArea] = useState<MuscleArea>('squat');
+  const [newExerciseEquipment, setNewExerciseEquipment] = useState<EquipmentType>('bodyweight');
+  const [newExerciseReps, setNewExerciseReps] = useState('');
+  const [newExerciseDuration, setNewExerciseDuration] = useState('');
+  const [newExerciseDescription, setNewExerciseDescription] = useState('');
 
   // History state
   const [sessions, setSessions] = useState(() => loadSessions().filter(s => s.completedAt));
@@ -195,14 +216,8 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
     setSavingBlocks(newBlocks);
   };
 
-  const exercises = useMemo(() => getAllExercises(), [customExercises]);
-
   const refreshWorkouts = () => {
     setWorkouts(loadSavedWorkouts());
-  };
-
-  const refreshCustomExercises = () => {
-    setCustomExercises(loadCustomExercises());
   };
 
   const handleToggleFavoriteWorkout = (workoutId: string, e: React.MouseEvent) => {
@@ -430,9 +445,18 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
 
   const handleEditWorkout = (workout: SavedWorkout) => {
     setEditingWorkout(workout);
-    setWorkoutName(workout.name);
-    setEstimatedMinutes(workout.estimatedMinutes?.toString() || '');
-    setSavingBlocks(workout.blocks);
+    setShowBuilder(true);
+  };
+
+  const handleSaveEditedWorkout = (updatedWorkout: SavedWorkout) => {
+    updateSavedWorkout(updatedWorkout.id, {
+      name: updatedWorkout.name,
+      estimatedMinutes: updatedWorkout.estimatedMinutes,
+      blocks: updatedWorkout.blocks,
+    });
+    setWorkouts(loadSavedWorkouts());
+    setEditingWorkout(null);
+    setShowBuilder(false);
   };
 
   const handleDeleteWorkout = (id: string) => {
@@ -442,21 +466,86 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
   };
 
   const handleDeleteExercise = (id: string) => {
-    deleteCustomExercise(id);
-    refreshCustomExercises();
+    deleteExercise(id);
     setShowExerciseDeleteConfirm(null);
+  };
+
+  const resetCreateExerciseForm = () => {
+    setNewExerciseName('');
+    setNewExerciseArea('squat');
+    setNewExerciseEquipment('bodyweight');
+    setNewExerciseReps('');
+    setNewExerciseDuration('');
+    setNewExerciseDescription('');
+    setEditingExercise(null);
+  };
+
+  const handleEditExercise = (exercise: Exercise) => {
+    setEditingExercise(exercise);
+    setNewExerciseName(exercise.name);
+    setNewExerciseArea(exercise.area);
+    setNewExerciseEquipment(exercise.equipment);
+    setNewExerciseReps(exercise.defaultReps?.toString() || '');
+    setNewExerciseDuration(exercise.defaultDuration?.toString() || '');
+    setNewExerciseDescription(exercise.description || '');
+    setShowCreateExercise(true);
+  };
+
+  const handleCreateOrUpdateExercise = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newExerciseName.trim()) return;
+
+    if (editingExercise) {
+      // Update existing exercise
+      const updated = updateExercise(editingExercise.id, {
+        name: newExerciseName.trim(),
+        area: newExerciseArea,
+        equipment: newExerciseEquipment,
+        defaultReps: newExerciseReps ? parseInt(newExerciseReps) : undefined,
+        defaultDuration: newExerciseDuration ? parseInt(newExerciseDuration) : undefined,
+        description: newExerciseDescription.trim() || undefined,
+      });
+      resetCreateExerciseForm();
+      setShowCreateExercise(false);
+      if (updated) setSelectedExercise(updated);
+    } else {
+      // Create new exercise
+      const newExercise = addExercise({
+        name: newExerciseName.trim(),
+        area: newExerciseArea,
+        equipment: newExerciseEquipment,
+        defaultReps: newExerciseReps ? parseInt(newExerciseReps) : undefined,
+        defaultDuration: newExerciseDuration ? parseInt(newExerciseDuration) : undefined,
+        description: newExerciseDescription.trim() || undefined,
+      });
+      resetCreateExerciseForm();
+      setShowCreateExercise(false);
+      setSelectedExercise(newExercise);
+    }
   };
 
   const filteredExercises = useMemo(() => {
     return exercises.filter(e => {
-      const matchesFavorites = filter !== 'favorites' || favorites.exercises.includes(e.id);
-      const matchesArea = filter === 'all' || filter === 'favorites' || e.area === filter;
+      const isCustom = e.id.startsWith('custom-');
+
+      // Source filter
+      const matchesSource =
+        sourceFilter === 'all' ||
+        (sourceFilter === 'default' && !isCustom) ||
+        (sourceFilter === 'custom' && isCustom) ||
+        (sourceFilter === 'favorites' && favorites.exercises.includes(e.id));
+
+      // Type filter
+      const matchesType = typeFilter === 'all' || e.area === typeFilter;
+
+      // Search filter
       const matchesSearch = search === '' ||
         e.name.toLowerCase().includes(search.toLowerCase()) ||
         e.equipment.toLowerCase().includes(search.toLowerCase());
-      return matchesFavorites && matchesArea && matchesSearch;
+
+      return matchesSource && matchesType && matchesSearch;
     });
-  }, [exercises, filter, search, favorites.exercises]);
+  }, [exercises, sourceFilter, typeFilter, search, favorites.exercises]);
 
   // Filter workouts by favorites if showFavoritesOnly is true
   const displayedWorkouts = useMemo(() => {
@@ -478,7 +567,12 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
     return (
       <WorkoutBuilder
         onStart={handleBuilderComplete}
-        onCancel={() => setShowBuilder(false)}
+        onCancel={() => {
+          setShowBuilder(false);
+          setEditingWorkout(null);
+        }}
+        editWorkout={editingWorkout || undefined}
+        onSave={handleSaveEditedWorkout}
       />
     );
   }
@@ -894,7 +988,7 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
           )}
 
           {isCustom && (
-            <div className="pt-4">
+            <div className="pt-4 space-y-3">
               {showExerciseDeleteConfirm === selectedExercise.id ? (
                 <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30">
                   <p className="text-red-800 dark:text-red-200 mb-4 text-center">
@@ -917,13 +1011,22 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
                   </div>
                 </div>
               ) : (
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowExerciseDeleteConfirm(selectedExercise.id)}
-                  className="w-full text-red-500 hover:text-red-600"
-                >
-                  Delete Custom Exercise
-                </Button>
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleEditExercise(selectedExercise)}
+                    className="w-full"
+                  >
+                    Edit Exercise
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowExerciseDeleteConfirm(selectedExercise.id)}
+                    className="w-full text-red-500 hover:text-red-600"
+                  >
+                    Delete Custom Exercise
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -1113,6 +1216,23 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
       {/* Exercises Tab */}
       {activeTab === 'exercises' && (
         <div>
+          {/* Header with New Exercise button */}
+          <div className="px-4 mb-4">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => setShowCreateExercise(true)}
+              className="w-full"
+            >
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Exercise
+              </span>
+            </Button>
+          </div>
+
           {/* Search */}
           <div className="px-4 mb-4">
             <div className="relative">
@@ -1130,27 +1250,51 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
           </div>
 
           {/* Filters */}
-          <div className="px-4 mb-6 overflow-x-auto scrollbar-hide">
-            <div className="flex gap-2 pb-1">
-              {AREA_FILTERS.map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => setFilter(f.value)}
-                  className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
-                    filter === f.value
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
+          <div className="px-4 mb-6 space-y-3">
+            {/* Source filters */}
+            <div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">Source</div>
+              <div className="flex flex-wrap gap-2">
+                {SOURCE_FILTERS.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => setSourceFilter(f.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      sourceFilter === f.value
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Type filters */}
+            <div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">Type</div>
+              <div className="flex flex-wrap gap-2">
+                {TYPE_FILTERS.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => setTypeFilter(f.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      typeFilter === f.value
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-transparent'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Exercise List */}
           <div className="px-4 space-y-6">
-            {filter === 'all' ? (
+            {sourceFilter === 'all' && typeFilter === 'all' ? (
               Object.entries(groupedByArea).map(([area, areaExercises]) => (
                 <div key={area}>
                   <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
@@ -1434,6 +1578,147 @@ export function LibraryPage({ onStartWorkout }: LibraryPageProps) {
           </div>
         )
       )}
+
+      {/* Create Exercise Modal */}
+      {showCreateExercise && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                {editingExercise ? 'Edit Exercise' : 'Create Exercise'}
+              </h2>
+              <button
+                onClick={() => { setShowCreateExercise(false); resetCreateExerciseForm(); }}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateOrUpdateExercise} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                  Exercise Name *
+                </label>
+                <input
+                  type="text"
+                  value={newExerciseName}
+                  onChange={(e) => setNewExerciseName(e.target.value)}
+                  placeholder="e.g., Jump Squats"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                    Movement Type
+                  </label>
+                  <select
+                    value={newExerciseArea}
+                    onChange={(e) => setNewExerciseArea(e.target.value as MuscleArea)}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="squat">Squat</option>
+                    <option value="hinge">Hinge</option>
+                    <option value="press">Press</option>
+                    <option value="push">Push</option>
+                    <option value="pull">Pull</option>
+                    <option value="core">Core</option>
+                    <option value="conditioning">Conditioning</option>
+                    <option value="warmup">Warmup</option>
+                    <option value="cooldown">Cooldown</option>
+                    <option value="full-body">Full Body</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                    Equipment
+                  </label>
+                  <select
+                    value={newExerciseEquipment}
+                    onChange={(e) => setNewExerciseEquipment(e.target.value as EquipmentType)}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="bodyweight">Bodyweight</option>
+                    <option value="dumbbell">Dumbbell</option>
+                    <option value="kettlebell">Kettlebell</option>
+                    <option value="barbell">Barbell</option>
+                    <option value="sandbag">Sandbag</option>
+                    <option value="resistance-band">Resistance Band</option>
+                    <option value="cable">Cable</option>
+                    <option value="machine">Machine</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                    Default Reps
+                  </label>
+                  <input
+                    type="number"
+                    value={newExerciseReps}
+                    onChange={(e) => setNewExerciseReps(e.target.value)}
+                    placeholder="e.g., 12"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                    Default Duration (sec)
+                  </label>
+                  <input
+                    type="number"
+                    value={newExerciseDuration}
+                    onChange={(e) => setNewExerciseDuration(e.target.value)}
+                    placeholder="e.g., 30"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                  Description (optional)
+                </label>
+                <textarea
+                  value={newExerciseDescription}
+                  onChange={(e) => setNewExerciseDescription(e.target.value)}
+                  placeholder="Add notes about form, tips, etc."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowCreateExercise(false); resetCreateExerciseForm(); }}
+                  className="flex-1"
+                  type="button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={!newExerciseName.trim()}
+                  className="flex-1"
+                >
+                  {editingExercise ? 'Save' : 'Create'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1473,9 +1758,13 @@ function ExerciseCard({ exercise, onClick, isFavorite, onToggleFavorite }: {
                 </svg>
               </button>
             )}
-            {isCustom && (
-              <span className="px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-600/20 text-purple-700 dark:text-purple-400 text-[10px] font-medium">
+            {isCustom ? (
+              <span className="px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-600/20 text-violet-700 dark:text-violet-400 text-[10px] font-medium">
                 Custom
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-[10px] font-medium">
+                Built-In
               </span>
             )}
           </div>

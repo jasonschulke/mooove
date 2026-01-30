@@ -1,13 +1,14 @@
-import { useState, useMemo, useRef } from 'react';
-import type { BlockType, WorkoutExercise, WorkoutBlock, MuscleArea, EquipmentType } from '../types';
-import { getAllExercises, getExerciseById } from '../data/exercises';
-import { addCustomExercise } from '../data/storage';
+import { useState, useRef, useMemo } from 'react';
+import type { BlockType, WorkoutExercise, WorkoutBlock, MuscleArea, EquipmentType, SavedWorkout } from '../types';
+import { useExercises } from '../contexts/ExerciseContext';
 import { useSignUpPrompt } from '../contexts/SignUpPromptContext';
 import { Button } from './Button';
 
 interface WorkoutBuilderProps {
   onStart: (blocks: WorkoutBlock[]) => void;
   onCancel: () => void;
+  editWorkout?: SavedWorkout;  // If provided, edit this workout
+  onSave?: (workout: SavedWorkout) => void;  // Callback for saving edited workout
 }
 
 const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; areas: MuscleArea[]; icon: string }> = {
@@ -60,11 +61,41 @@ interface BuilderBlock {
   exercises: Record<number, string[]>; // setNum -> exerciseIds
 }
 
-export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
+// Convert WorkoutBlocks to BuilderBlocks for editing
+function workoutBlocksToBuilderBlocks(workoutBlocks: WorkoutBlock[]): BuilderBlock[] {
+  return workoutBlocks.map(block => {
+    const exercisesBySet: Record<number, string[]> = {};
+
+    block.exercises.forEach(exercise => {
+      const setNum = exercise.sets || 1;
+      if (!exercisesBySet[setNum]) {
+        exercisesBySet[setNum] = [];
+      }
+      exercisesBySet[setNum].push(exercise.exerciseId);
+    });
+
+    return {
+      id: block.id,
+      type: block.type,
+      exercises: exercisesBySet,
+    };
+  });
+}
+
+export function WorkoutBuilder({ onStart, onCancel, editWorkout, onSave }: WorkoutBuilderProps) {
   const { triggerSignUpPrompt } = useSignUpPrompt();
+  const { exercises, addExercise: addCustomExercise, getExerciseById } = useExercises();
+
+  const isEditMode = !!editWorkout;
 
   // Dynamic list of blocks
-  const [blocks, setBlocks] = useState<BuilderBlock[]>([]);
+  const [blocks, setBlocks] = useState<BuilderBlock[]>(() =>
+    editWorkout ? workoutBlocksToBuilderBlocks(editWorkout.blocks) : []
+  );
+
+  // Workout metadata for edit mode
+  const [workoutName, setWorkoutName] = useState(editWorkout?.name || '');
+  const [estimatedMinutes, setEstimatedMinutes] = useState(editWorkout?.estimatedMinutes?.toString() || '');
 
   // Block picker modal
   const [showBlockPicker, setShowBlockPicker] = useState(false);
@@ -91,9 +122,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
   const [newExerciseEquipment, setNewExerciseEquipment] = useState<EquipmentType>('bodyweight');
   const [newExerciseReps, setNewExerciseReps] = useState<string>('');
   const [newExerciseDuration, setNewExerciseDuration] = useState<string>('');
-  const [exerciseListKey, setExerciseListKey] = useState(0);
-
-  const exercises = useMemo(() => getAllExercises(), [exerciseListKey]);
+  // Note: exercises comes from ExerciseContext via useExercises()
 
   // Toggle block type selection in picker
   const toggleBlockType = (type: BlockType) => {
@@ -224,7 +253,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
     }));
   };
 
-  const addExercise = (blockId: string, setNum: number, exerciseId: string) => {
+  const addExerciseToBlock = (blockId: string, setNum: number, exerciseId: string) => {
     setBlocks(prev => prev.map(block => {
       if (block.id !== blockId) return block;
       const setExercises = [...(block.exercises[setNum] || [])];
@@ -278,8 +307,8 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
       defaultDuration: newExerciseDuration ? parseInt(newExerciseDuration) : undefined,
     });
 
-    setExerciseListKey(k => k + 1);
-    addExercise(createForBlockId, createForSet, newExercise.id);
+    // Exercise list auto-updates via ExerciseContext
+    addExerciseToBlock(createForBlockId, createForSet, newExercise.id);
     setShowCreateExercise(false);
     setCreateForBlockId(null);
     setCreateForSet(null);
@@ -318,8 +347,8 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
     return count;
   }, [blocks]);
 
-  // Build workout blocks and start
-  const handleStart = () => {
+  // Build workout blocks
+  const buildWorkoutBlocks = (): WorkoutBlock[] => {
     const workoutBlocks: WorkoutBlock[] = [];
 
     blocks.forEach((block) => {
@@ -351,12 +380,45 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
       }
     });
 
+    return workoutBlocks;
+  };
+
+  // Build workout blocks and start
+  const handleStart = () => {
+    const workoutBlocks = buildWorkoutBlocks();
+
     if (workoutBlocks.length === 0) {
       alert('Please add at least one block with exercises');
       return;
     }
 
     onStart(workoutBlocks);
+  };
+
+  // Save edited workout
+  const handleSave = () => {
+    if (!editWorkout || !onSave) return;
+    if (!workoutName.trim()) {
+      alert('Please enter a workout name');
+      return;
+    }
+
+    const workoutBlocks = buildWorkoutBlocks();
+
+    if (workoutBlocks.length === 0) {
+      alert('Please add at least one block with exercises');
+      return;
+    }
+
+    const updatedWorkout: SavedWorkout = {
+      ...editWorkout,
+      name: workoutName.trim(),
+      estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : undefined,
+      blocks: workoutBlocks,
+      updatedAt: new Date().toISOString(),
+    };
+
+    onSave(updatedWorkout);
   };
 
   return (
@@ -366,8 +428,12 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
           <div className="flex items-center gap-2">
             <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
             <div>
-              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Build Workout</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Add blocks and exercises</p>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                {isEditMode ? 'Edit Workout' : 'Build Workout'}
+              </h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {isEditMode ? 'Modify blocks and exercises' : 'Add blocks and exercises'}
+              </p>
             </div>
           </div>
           <button
@@ -379,6 +445,32 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
             </svg>
           </button>
         </div>
+
+        {/* Workout name and time fields (edit mode only) */}
+        {isEditMode && (
+          <div className="flex gap-3 mt-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Name</label>
+              <input
+                type="text"
+                value={workoutName}
+                onChange={e => setWorkoutName(e.target.value)}
+                placeholder="Workout name"
+                className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-base text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+            <div className="w-24">
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Time</label>
+              <input
+                type="number"
+                value={estimatedMinutes}
+                onChange={e => setEstimatedMinutes(e.target.value)}
+                placeholder="min"
+                className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-base text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-center"
+              />
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="space-y-4 flex-1">
@@ -588,7 +680,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                     return (
                                       <button
                                         key={ex.id}
-                                        onClick={() => addExercise(block.id, setNum, ex.id)}
+                                        onClick={() => addExerciseToBlock(block.id, setNum, ex.id)}
                                         className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                       >
                                         <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${exAreaColorClass}`}>
@@ -673,16 +765,39 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
         </button>
       </div>
 
-      <div className="mt-8">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={handleStart}
-          disabled={totalExercises === 0}
-          className="w-full"
-        >
-          Start Workout ({totalExercises} exercises)
-        </Button>
+      <div className="mt-8 space-y-3">
+        {isEditMode ? (
+          <>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleSave}
+              disabled={totalExercises === 0 || !workoutName.trim()}
+              className="w-full"
+            >
+              Save Changes
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={handleStart}
+              disabled={totalExercises === 0}
+              className="w-full"
+            >
+              Start Workout ({totalExercises} exercises)
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleStart}
+            disabled={totalExercises === 0}
+            className="w-full"
+          >
+            Start Workout ({totalExercises} exercises)
+          </Button>
+        )}
       </div>
 
       {/* Block Picker Modal */}
