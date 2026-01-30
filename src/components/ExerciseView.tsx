@@ -94,28 +94,17 @@ export function ExerciseView({
     <div className={`flex flex-col ${compact ? 'h-full' : ''}`}>
       {/* Main Content */}
       <div className={`${compact ? 'px-4 py-4 flex-1 flex flex-col justify-between' : 'px-5 py-6'}`}>
-        {/* Hero: Exercise Name - larger for TV viewing */}
-        <div className={`${compact ? 'mb-2' : 'text-center mb-2'}`}>
-          {compact ? (
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 truncate">{exercise.name}</h1>
-              <span className="px-2 py-0.5 text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-md whitespace-nowrap flex-shrink-0">
-                {areaLabel} · {equipmentLabel}
-              </span>
-            </div>
-          ) : (
-            <>
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">{exercise.name}</h1>
-              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {areaLabel} · {equipmentLabel}
-              </div>
-            </>
-          )}
+        {/* Hero: Exercise Name - centered */}
+        <div className={`text-center ${compact ? 'mb-4' : 'mb-6'}`}>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">{exercise.name}</h1>
+          <div className={`${compact ? 'text-xs' : 'text-sm'} text-slate-500 dark:text-slate-400 mt-1`}>
+            {areaLabel} · {equipmentLabel}
+          </div>
         </div>
 
         {/* Exercise GIF - hide in compact mode to save space */}
         {gifUrl && !gifLoading && !compact && (
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-6">
             <img
               src={gifUrl}
               alt={`${exercise.name} demonstration`}
@@ -134,47 +123,49 @@ export function ExerciseView({
             </div>
           )}
 
-          {/* Description/Instructions - Now above inputs */}
-          <div className={`${compact ? 'px-3 py-2 mb-3' : 'mb-4 px-3 py-2'} rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 ${compact ? '' : 'min-h-[72px]'}`}>
-            {!compact && (
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-0.5 uppercase tracking-wide">How to</div>
-            )}
-            <p className={`${compact ? 'text-sm line-clamp-2' : 'text-sm line-clamp-2'} text-slate-600 dark:text-slate-300 leading-relaxed`}>
+          {/* Description/Instructions - fixed height to keep layout stable */}
+          <div className={`${compact ? 'mb-5 h-10' : 'mb-6 h-12'} flex items-center justify-center`}>
+            <p className={`text-sm text-slate-500 dark:text-slate-400 leading-relaxed italic text-center ${compact ? 'line-clamp-2' : 'line-clamp-3'}`}>
               {exercise.description || 'Perform the exercise with controlled movement and proper form.'}
             </p>
           </div>
 
           {/* Weight & Reps Input */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Weight</label>
-              <div className="relative">
-                {exercise.equipment === 'bodyweight' ? (
-                  <div className={`w-full px-3 ${compact ? 'py-2.5' : 'py-2.5'} rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 ${compact ? 'text-base' : 'text-base'} font-medium text-center`}>
-                    Bodyweight
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      type="number"
-                      value={weight || ''}
-                      onChange={e => setWeight(e.target.value ? Number(e.target.value) : undefined)}
-                      className={`w-full px-3 ${compact ? 'py-2.5' : 'py-2.5'} rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 ${compact ? 'text-lg' : 'text-lg'} font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors`}
-                      placeholder="—"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">lb</span>
-                  </>
-                )}
-              </div>
+            {/* Weight Field */}
+            <div className={`flex items-center gap-2 px-3 ${compact ? 'py-2.5' : 'py-2.5'} rounded-lg border border-slate-200 dark:border-slate-700 ${
+              exercise.equipment === 'bodyweight'
+                ? 'bg-slate-50 dark:bg-slate-800/50'
+                : 'bg-white dark:bg-slate-800'
+            }`}>
+              <span className="material-symbols-outlined text-slate-400 flex-shrink-0" style={{ fontSize: '18px' }}>weight</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide flex-shrink-0">Weight</span>
+              {exercise.equipment === 'bodyweight' ? (
+                <span className="flex-1 text-right text-slate-500 dark:text-slate-400 font-medium">BW</span>
+              ) : (
+                <>
+                  <input
+                    type="number"
+                    value={weight || ''}
+                    onChange={e => setWeight(e.target.value ? Number(e.target.value) : undefined)}
+                    className="flex-1 min-w-0 bg-transparent text-slate-900 dark:text-slate-100 text-lg font-semibold text-right focus:outline-none"
+                    placeholder="—"
+                  />
+                  <span className="text-xs text-slate-400 flex-shrink-0">lb</span>
+                </>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">
-                {duration ? 'Duration' : 'Reps'}
-              </label>
+
+            {/* Reps/Duration Field */}
+            <div className={`flex items-center gap-2 px-3 ${compact ? 'py-2.5' : 'py-2.5'} rounded-lg border border-slate-200 dark:border-slate-700 ${
+              duration
+                ? 'bg-slate-50 dark:bg-slate-800/50'
+                : 'bg-white dark:bg-slate-800'
+            }`}>
+              <span className="material-symbols-outlined text-slate-400 flex-shrink-0" style={{ fontSize: '18px' }}>{duration ? 'schedule' : 'tag'}</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide flex-shrink-0">{duration ? 'Time' : 'Reps'}</span>
               {duration ? (
-                <div className={`w-full px-3 ${compact ? 'py-2.5' : 'py-2.5'} rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 ${compact ? 'text-base' : 'text-base'} font-medium text-center`}>
-                  {duration}s
-                </div>
+                <span className="flex-1 text-right text-slate-500 dark:text-slate-400 font-medium">{duration}s</span>
               ) : (
                 <input
                   type={reps === 'AMRAP' ? 'text' : 'number'}
@@ -187,7 +178,7 @@ export function ExerciseView({
                       setReps(val ? Number(val) : undefined);
                     }
                   }}
-                  className={`w-full px-3 ${compact ? 'py-2.5' : 'py-2.5'} rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 ${compact ? 'text-lg' : 'text-lg'} font-semibold text-center focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 transition-colors`}
+                  className="flex-1 min-w-0 bg-transparent text-slate-900 dark:text-slate-100 text-lg font-semibold text-right focus:outline-none"
                   placeholder="—"
                 />
               )}
@@ -195,8 +186,8 @@ export function ExerciseView({
           </div>
         </div>
 
-        {/* Swap - Always visible */}
-        <div className={`text-center ${compact ? 'pt-2' : 'h-5'}`}>
+        {/* Swap - Always visible, vertically centered */}
+        <div className={`${compact ? 'flex-1' : 'h-14 mt-6'} flex items-center justify-center`}>
           {alternatives.length > 0 ? (
             <>
               <span className={`${compact ? 'text-xs' : 'text-sm'} text-slate-400 dark:text-slate-500`}>Swap: </span>
@@ -221,29 +212,19 @@ export function ExerciseView({
       {/* Footer Actions */}
       <div className={`${compact ? 'px-4 py-3' : 'px-5 py-4'} border-t border-slate-200 dark:border-slate-800`}>
         <div className={`flex ${compact ? 'gap-2' : 'gap-3'}`}>
-          {/* Back button */}
-          {canGoBack && onBack && (
-            <button
-              onClick={onBack}
-              className={`${compact ? 'py-2.5 px-3' : 'py-3.5 px-4'} rounded-xl transition-colors bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400`}
-              title="Previous exercise"
-            >
-              <svg className={compact ? 'w-4 h-4' : 'w-5 h-5'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
+          {/* Back button - always visible, dimmed when inactive */}
           <button
-            onClick={() => setShowTimer(!showTimer)}
+            onClick={canGoBack && onBack ? onBack : undefined}
+            disabled={!canGoBack}
             className={`${compact ? 'py-2.5 px-3' : 'py-3.5 px-4'} rounded-xl transition-colors ${
-              showTimer
-                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400'
+              canGoBack
+                ? 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400'
+                : 'bg-slate-100/50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 cursor-not-allowed'
             }`}
-            title="Timer"
+            title="Previous exercise"
           >
             <svg className={compact ? 'w-4 h-4' : 'w-5 h-5'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <button
@@ -257,6 +238,18 @@ export function ExerciseView({
             className={`flex-1 ${compact ? 'py-2.5 px-4 text-sm' : 'py-3.5 px-6 text-base'} rounded-xl font-semibold transition-colors bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/25`}
           >
             Done
+          </button>
+          {/* Timer button - now on the right */}
+          <button
+            onClick={() => setShowTimer(!showTimer)}
+            className={`${compact ? 'py-2.5 px-3' : 'py-3.5 px-4'} rounded-xl transition-colors ${
+              showTimer
+                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400'
+            }`}
+            title="Timer"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: compact ? '16px' : '20px', lineHeight: 1, verticalAlign: 'middle', marginTop: '-2px' }}>timer</span>
           </button>
         </div>
       </div>

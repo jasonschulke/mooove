@@ -201,6 +201,9 @@ function AppContent() {
                 handleBuilderStart(savedWorkout.blocks);
               }
             }}
+            onPreviewWorkout={(savedWorkout) => {
+              // For now, just start the workout - preview modal handled in component
+            }}
             onStartCardio={handleStartCardio}
             onManageLibrary={() => setCurrentPage('library')}
           />
@@ -221,6 +224,21 @@ function AppContent() {
           currentPage={currentPage}
           onNavigate={setCurrentPage}
           hasActiveWorkout={!!workout.session && ((workout.session.blocks?.length ?? 0) > 0 || !!workout.session.cardioType)}
+          workoutType={
+            workout.session?.cardioType
+              ? (['run', 'trail-run'].includes(workout.session.cardioType) ? 'cardio-run' : 'cardio-walk')
+              : (workout.session?.blocks?.length ?? 0) > 0 ? 'strength' : null
+          }
+          workoutProgress={
+            workout.session?.blocks?.length
+              ? (() => {
+                  // Calculate based on completed exercises vs total
+                  const totalExercises = workout.session!.blocks.reduce((sum, block) => sum + block.exercises.length, 0);
+                  const completedExercises = workout.session!.exercises.length;
+                  return Math.round((completedExercises / totalExercises) * 100);
+                })()
+              : undefined
+          }
         />
       )}
     </div>

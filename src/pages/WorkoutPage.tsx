@@ -575,7 +575,7 @@ export function WorkoutPage({
         <span className="text-lg text-slate-600 dark:text-slate-400 tabular-nums font-medium">{formatElapsedTime(elapsedTime)}</span>
         <button
           onClick={() => setShowPauseMenu(true)}
-          className="p-2 -mr-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          className="p-2 -mr-2 text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
           title="Pause workout"
         >
           <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
@@ -589,9 +589,10 @@ export function WorkoutPage({
   // === LANDSCAPE LAYOUT ===
   if (isLandscape) {
     return (
-      <div className="h-screen flex flex-col bg-slate-100 dark:bg-slate-950 overflow-hidden safe-x">
-        {/* Thin progress bar at top */}
-        <div className="px-4 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+      <div className="h-screen w-screen bg-black overflow-hidden safe-x">
+        <div className="h-[109%] w-[109%] origin-top-left scale-[0.92] flex flex-col bg-slate-100 dark:bg-black p-4">
+        {/* Progress bar header - same width as cards */}
+        <div className="mb-3 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center gap-4">
             {/* Timer */}
             <span className="text-sm text-slate-600 dark:text-slate-400 tabular-nums font-medium">{formatElapsedTime(elapsedTime)}</span>
@@ -645,7 +646,7 @@ export function WorkoutPage({
             {/* Pause button */}
             <button
               onClick={() => setShowPauseMenu(true)}
-              className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
               title="Pause workout"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -724,25 +725,22 @@ export function WorkoutPage({
         )}
 
         {/* Main content - 50/50 split */}
-        <div className="flex-1 flex gap-4 p-4 min-h-0">
-          {/* Left Panel - Exercise Card (scrollable) */}
-          <div className="w-1/2 flex flex-col min-h-0">
-            <div className="flex-1 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none overflow-y-auto scrollbar-hide">
-              <ExerciseView
-                workoutExercise={effectiveExercise}
-                onComplete={handleComplete}
-                onSkip={handleSkip}
-                onSwapExercise={handleSwap}
-                onBack={handleBack}
-                canGoBack={!isFirstExercise}
-                compact
-              />
-            </div>
+        <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+          {/* Left Panel - Exercise Card */}
+          <div className="w-1/2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none overflow-y-auto scrollbar-hide">
+            <ExerciseView
+              workoutExercise={effectiveExercise}
+              onComplete={handleComplete}
+              onSkip={handleSkip}
+              onSwapExercise={handleSwap}
+              onBack={handleBack}
+              canGoBack={!isFirstExercise}
+              compact
+            />
           </div>
 
-          {/* Right Panel - Up Next */}
-          <div className="w-1/2 flex flex-col min-h-0">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-3">Up Next</h2>
+          {/* Right Panel - Upcoming exercises */}
+          <div className="w-1/2 flex flex-col min-h-0 overflow-hidden">
             <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2">
               {upcomingGroups.map((group, groupIdx) => {
                 const isExpanded = expandedUpcoming.has(groupIdx);
@@ -809,6 +807,7 @@ export function WorkoutPage({
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     );

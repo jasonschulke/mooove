@@ -32,7 +32,7 @@ export type MuscleArea =
   | 'full-body';
 
 /** Workout block types for structuring sessions */
-export type BlockType = 'warmup' | 'strength' | 'conditioning' | 'cooldown';
+export type BlockType = 'warmup' | 'strength' | 'conditioning' | 'cardio' | 'cooldown';
 
 /** Cardio workout types (no blocks/sets needed) */
 export type CardioType = 'walk' | 'run' | 'trail-run' | 'hike';

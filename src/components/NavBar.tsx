@@ -1,10 +1,111 @@
+type WorkoutType = 'strength' | 'cardio-run' | 'cardio-walk' | null;
+
 interface NavBarProps {
   currentPage: 'home' | 'workout' | 'library' | 'chat' | 'settings';
   onNavigate: (page: 'home' | 'workout' | 'library' | 'chat' | 'settings') => void;
   hasActiveWorkout: boolean;
+  workoutType?: WorkoutType;
+  workoutProgress?: number;
 }
 
-export function NavBar({ currentPage, onNavigate, hasActiveWorkout }: NavBarProps) {
+function DumbbellIcon() {
+  return (
+    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.5 6.5v11M17.5 6.5v11M6.5 12h11M4 8v8M20 8v8M2 10v4M22 10v4" />
+    </svg>
+  );
+}
+
+function LiftingIcon() {
+  return (
+    <svg className="w-7 h-7 text-white animate-lift" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.5 6.5v11M17.5 6.5v11M6.5 12h11M4 8v8M20 8v8M2 10v4M22 10v4" />
+    </svg>
+  );
+}
+
+function RunningIcon() {
+  // Dynamic running pose - centered, with motion lines
+  return (
+    <svg className="w-7 h-7 text-white animate-run-bounce" fill="currentColor" viewBox="0 0 24 24">
+      {/* Motion lines */}
+      <path d="M2 8h3M1 12h4M2 16h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.6" />
+      {/* Head */}
+      <circle cx="15" cy="5" r="2.5" />
+      {/* Body - leaning forward */}
+      <path d="M14.5 7.5L12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      {/* Back arm - pumping back */}
+      <path d="M13 9L16.5 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      {/* Front arm - pumping forward */}
+      <path d="M13 9.5L9 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      {/* Back leg - extended behind */}
+      <path d="M12 12L15.5 15.5L19 17" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      {/* Front leg - driving forward */}
+      <path d="M12 12L9 16L6 15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+function WalkingIcon() {
+  // Walking pose - centered, upright stride
+  return (
+    <svg className="w-7 h-7 text-white animate-walk-bounce" fill="currentColor" viewBox="0 0 24 24">
+      {/* Head */}
+      <circle cx="12" cy="5" r="2.5" />
+      {/* Body */}
+      <path d="M12 7.5V12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      {/* Arms swinging */}
+      <path d="M12 9L9 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <path d="M12 9L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      {/* Legs in stride */}
+      <path d="M12 12L9 17L7 21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <path d="M12 12L15 17L17 21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+function ProgressRing({ progress, children }: { progress: number; children: React.ReactNode }) {
+  const circumference = 2 * Math.PI * 24;
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
+
+  return (
+    <div className="relative w-14 h-14">
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56">
+        {/* Background track - light gray in light mode, dark in dark mode */}
+        <circle cx="28" cy="28" r="24" fill="none" className="stroke-slate-300 dark:stroke-slate-700" strokeWidth="3" />
+        {/* Progress arc - emerald to match the button */}
+        <circle
+          cx="28" cy="28" r="24"
+          fill="none"
+          className="stroke-emerald-600 dark:stroke-emerald-400"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function WorkoutIcon({ type }: { type: WorkoutType }) {
+  switch (type) {
+    case 'strength':
+      return <LiftingIcon />;
+    case 'cardio-run':
+      return <RunningIcon />;
+    case 'cardio-walk':
+      return <WalkingIcon />;
+    default:
+      return <DumbbellIcon />;
+  }
+}
+
+export function NavBar({ currentPage, onNavigate, hasActiveWorkout, workoutType, workoutProgress }: NavBarProps) {
   const getButtonClass = (page: string) => {
     const isActive = currentPage === page;
     return `flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
@@ -47,15 +148,26 @@ export function NavBar({ currentPage, onNavigate, hasActiveWorkout }: NavBarProp
           className="relative flex flex-col items-center gap-1 px-3 py-2"
         >
           {/* Floating circle - center aligned with top border of nav */}
-          <div className={`absolute -top-7 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all bg-emerald-500 ${
+          <div className={`absolute -top-7 flex items-center justify-center shadow-lg transition-all rounded-full ${
             hasActiveWorkout
-              ? 'shadow-emerald-500/40 animate-pulse-slow'
+              ? 'shadow-emerald-500/40'
               : 'shadow-emerald-500/30'
           }`}>
-            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {/* Dumbbell / Exercise icon */}
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.5 6.5v11M17.5 6.5v11M6.5 12h11M4 8v8M20 8v8M2 10v4M22 10v4" />
-            </svg>
+            {hasActiveWorkout && workoutProgress !== undefined ? (
+              <ProgressRing progress={workoutProgress}>
+                <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center">
+                  <WorkoutIcon type={workoutType ?? null} />
+                </div>
+              </ProgressRing>
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center ring-4 ring-slate-200 dark:ring-slate-900">
+                {hasActiveWorkout ? (
+                  <WorkoutIcon type={workoutType ?? null} />
+                ) : (
+                  <DumbbellIcon />
+                )}
+              </div>
+            )}
           </div>
           {/* Spacer to maintain alignment with other tabs */}
           <div className="w-6 h-6" />

@@ -10,46 +10,22 @@ interface WorkoutBuilderProps {
   onCancel: () => void;
 }
 
-const BLOCK_TYPES: { type: BlockType; label: string; areas: MuscleArea[] }[] = [
-  { type: 'warmup', label: 'Warm-up', areas: ['warmup', 'core', 'full-body'] },
-  { type: 'strength', label: 'Strength', areas: ['squat', 'hinge', 'press', 'push', 'pull'] },
-  { type: 'conditioning', label: 'Conditioning', areas: ['conditioning', 'core'] },
-  { type: 'cooldown', label: 'Cooldown', areas: ['warmup', 'core', 'cooldown'] },
-];
+const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; areas: MuscleArea[]; icon: string }> = {
+  warmup: { label: 'Warm-up', areas: ['warmup', 'core', 'full-body'], icon: 'physical_therapy' },
+  strength: { label: 'Strength', areas: ['squat', 'hinge', 'press', 'push', 'pull', 'core'], icon: 'exercise' },
+  conditioning: { label: 'Conditioning', areas: ['conditioning', 'core', 'full-body'], icon: 'ecg_heart' },
+  cardio: { label: 'Cardio', areas: ['conditioning', 'full-body'], icon: 'directions_run' },
+  cooldown: { label: 'Cooldown', areas: ['warmup', 'core', 'cooldown'], icon: 'self_improvement' },
+};
 
-const DEFAULT_SET_COUNT = 3;
-
-// Block type icons
+// Block type icons using Material Symbols
 const getBlockIcon = (type: BlockType) => {
-  switch (type) {
-    case 'warmup':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
-        </svg>
-      );
-    case 'strength':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h2l2-3v6l-2-3H3zm18 0h-2l-2-3v6l2-3h2zm-9-4a2 2 0 100 4 2 2 0 000-4zm-4 2h2m4 0h2" />
-        </svg>
-      );
-    case 'conditioning':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-        </svg>
-      );
-    case 'cooldown':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const config = BLOCK_TYPE_CONFIG[type];
+  return (
+    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+      {config?.icon || 'fitness_center'}
+    </span>
+  );
 };
 
 // Movement area colors
@@ -78,25 +54,29 @@ const getAreaColor = (area: string) => {
   }
 };
 
+interface BuilderBlock {
+  id: string;
+  type: BlockType;
+  exercises: Record<number, string[]>; // setNum -> exerciseIds
+}
+
 export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
   const { triggerSignUpPrompt } = useSignUpPrompt();
 
-  // Store exercises per block: { blockType: { setNum: exerciseId[] } }
-  const [blockExercises, setBlockExercises] = useState<Record<BlockType, Record<number, string[]>>>({
-    warmup: { 1: [] },
-    strength: { 1: [], 2: [], 3: [] },
-    conditioning: { 1: [] },
-    cooldown: { 1: [] },
-  });
+  // Dynamic list of blocks
+  const [blocks, setBlocks] = useState<BuilderBlock[]>([]);
+
+  // Block picker modal
+  const [showBlockPicker, setShowBlockPicker] = useState(false);
+  const [selectedBlockTypes, setSelectedBlockTypes] = useState<Set<BlockType>>(new Set());
 
   // Adding exercise state
-  const [addingToBlock, setAddingToBlock] = useState<BlockType | null>(null);
+  const [addingToBlockId, setAddingToBlockId] = useState<string | null>(null);
   const [addingToSet, setAddingToSet] = useState<number | null>(null);
   const [exerciseSearch, setExerciseSearch] = useState('');
 
-
-  // Swipe to delete state - use refs for smooth animation during swipe
-  const [swipingExercise, setSwipingExercise] = useState<{ blockType: BlockType; setNum: number; exerciseIdx: number } | null>(null);
+  // Swipe to delete state
+  const [swipingExercise, setSwipingExercise] = useState<{ blockId: string; setNum: number; exerciseIdx: number } | null>(null);
   const swipeStartX = useRef(0);
   const swipeOffsetRef = useRef(0);
   const swipeElementRef = useRef<HTMLDivElement | null>(null);
@@ -104,7 +84,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
 
   // Create exercise modal state
   const [showCreateExercise, setShowCreateExercise] = useState(false);
-  const [createForBlock, setCreateForBlock] = useState<BlockType | null>(null);
+  const [createForBlockId, setCreateForBlockId] = useState<string | null>(null);
   const [createForSet, setCreateForSet] = useState<number | null>(null);
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseArea, setNewExerciseArea] = useState<MuscleArea>('core');
@@ -115,12 +95,81 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
 
   const exercises = useMemo(() => getAllExercises(), [exerciseListKey]);
 
-  // Swipe handlers - use direct DOM manipulation for smooth 60fps animation
-  const handleTouchStart = (e: React.TouchEvent, blockType: BlockType, setNum: number, exerciseIdx: number, element: HTMLDivElement | null) => {
+  // Toggle block type selection in picker
+  const toggleBlockType = (type: BlockType) => {
+    setSelectedBlockTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  };
+
+  // Add selected blocks
+  const addSelectedBlocks = () => {
+    // Sort by preferred order: warmup, strength, conditioning, cardio, cooldown
+    const order: BlockType[] = ['warmup', 'strength', 'conditioning', 'cardio', 'cooldown'];
+    const sorted = order.filter(t => selectedBlockTypes.has(t));
+
+    const newBlocks: BuilderBlock[] = sorted.map((type, idx) => ({
+      id: `${type}-${Date.now()}-${idx}`,
+      type,
+      exercises: { 1: [] },
+    }));
+
+    setBlocks(prev => [...prev, ...newBlocks]);
+    setShowBlockPicker(false);
+    setSelectedBlockTypes(new Set());
+  };
+
+  // Add a set to a block
+  const addSetToBlock = (blockId: string) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id !== blockId) return block;
+      const setCount = Object.keys(block.exercises).length;
+      return { ...block, exercises: { ...block.exercises, [setCount + 1]: [] } };
+    }));
+  };
+
+  // Remove the last set from a block
+  const removeSetFromBlock = (blockId: string) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id !== blockId) return block;
+      const setCount = Object.keys(block.exercises).length;
+      if (setCount <= 1) return block;
+      const newExercises = { ...block.exercises };
+      delete newExercises[setCount];
+      return { ...block, exercises: newExercises };
+    }));
+  };
+
+  // Remove a block
+  const removeBlock = (blockId: string) => {
+    setBlocks(prev => prev.filter(b => b.id !== blockId));
+  };
+
+  // Move block up/down
+  const moveBlock = (blockId: string, direction: 'up' | 'down') => {
+    setBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === blockId);
+      if (idx === -1) return prev;
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const newBlocks = [...prev];
+      [newBlocks[idx], newBlocks[newIdx]] = [newBlocks[newIdx], newBlocks[idx]];
+      return newBlocks;
+    });
+  };
+
+  // Swipe handlers
+  const handleTouchStart = (e: React.TouchEvent, blockId: string, setNum: number, exerciseIdx: number, element: HTMLDivElement | null) => {
     swipeStartX.current = e.touches[0].clientX;
     swipeOffsetRef.current = 0;
     swipeElementRef.current = element;
-    setSwipingExercise({ blockType, setNum, exerciseIdx });
+    setSwipingExercise({ blockId, setNum, exerciseIdx });
     if (element) {
       element.style.transition = 'none';
     }
@@ -131,7 +180,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
     const diff = swipeStartX.current - e.touches[0].clientX;
     const offset = Math.max(0, Math.min(diff, 120));
     swipeOffsetRef.current = offset;
-    // Direct DOM update - no React re-render
     swipeElementRef.current.style.transform = `translateX(-${offset}px)`;
   };
 
@@ -141,13 +189,11 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
     if (element) {
       element.style.transition = 'transform 0.2s ease-out';
       if (swipeOffsetRef.current >= swipeThreshold) {
-        // Slide out completely before removing
         element.style.transform = 'translateX(-100%)';
         setTimeout(() => {
-          removeExercise(swipingExercise.blockType, swipingExercise.setNum, swipingExercise.exerciseIdx);
+          removeExercise(swipingExercise.blockId, swipingExercise.setNum, swipingExercise.exerciseIdx);
         }, 150);
       } else {
-        // Snap back
         element.style.transform = 'translateX(0)';
       }
     }
@@ -157,62 +203,63 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
   };
 
   // Move exercise up or down in the list
-  const moveExercise = (blockType: BlockType, setNum: number, fromIdx: number, direction: 'up' | 'down') => {
+  const moveExercise = (blockId: string, setNum: number, fromIdx: number, direction: 'up' | 'down') => {
     const toIdx = direction === 'up' ? fromIdx - 1 : fromIdx + 1;
-    setBlockExercises(prev => {
-      const newData = { ...prev };
-      const setExercises = [...(newData[blockType][setNum] || [])];
-      if (toIdx < 0 || toIdx >= setExercises.length) return prev;
+    setBlocks(prev => prev.map(block => {
+      if (block.id !== blockId) return block;
+      const setExercises = [...(block.exercises[setNum] || [])];
+      if (toIdx < 0 || toIdx >= setExercises.length) return block;
       const [removed] = setExercises.splice(fromIdx, 1);
       setExercises.splice(toIdx, 0, removed);
-      newData[blockType] = { ...newData[blockType], [setNum]: setExercises };
-      return newData;
-    });
+      return { ...block, exercises: { ...block.exercises, [setNum]: setExercises } };
+    }));
   };
 
-  const removeExercise = (blockType: BlockType, setNum: number, exerciseIdx: number) => {
-    setBlockExercises(prev => {
-      const newData = { ...prev };
-      const setExercises = [...(newData[blockType][setNum] || [])];
+  const removeExercise = (blockId: string, setNum: number, exerciseIdx: number) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id !== blockId) return block;
+      const setExercises = [...(block.exercises[setNum] || [])];
       setExercises.splice(exerciseIdx, 1);
-      newData[blockType] = { ...newData[blockType], [setNum]: setExercises };
-      return newData;
-    });
+      return { ...block, exercises: { ...block.exercises, [setNum]: setExercises } };
+    }));
   };
 
-  const addExercise = (blockType: BlockType, setNum: number, exerciseId: string) => {
-    setBlockExercises(prev => {
-      const newData = { ...prev };
-      const setExercises = [...(newData[blockType][setNum] || [])];
+  const addExercise = (blockId: string, setNum: number, exerciseId: string) => {
+    setBlocks(prev => prev.map(block => {
+      if (block.id !== blockId) return block;
+      const setExercises = [...(block.exercises[setNum] || [])];
       setExercises.push(exerciseId);
-      newData[blockType] = { ...newData[blockType], [setNum]: setExercises };
-      return newData;
-    });
-    // Keep menu open for quick multi-select, just clear search
+      return { ...block, exercises: { ...block.exercises, [setNum]: setExercises } };
+    }));
     setExerciseSearch('');
   };
 
-  const copyToNextSet = (blockType: BlockType, currentSetNum: number, exerciseId: string) => {
+  const copyToNextSet = (blockId: string, currentSetNum: number, exerciseId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const setCount = Object.keys(block.exercises).length;
     const nextSetNum = currentSetNum + 1;
-    if (nextSetNum > DEFAULT_SET_COUNT) return;
-    setBlockExercises(prev => {
-      const newData = { ...prev };
-      const nextSetExercises = [...(newData[blockType][nextSetNum] || [])];
+    if (nextSetNum > setCount) return;
+    setBlocks(prev => prev.map(b => {
+      if (b.id !== blockId) return b;
+      const nextSetExercises = [...(b.exercises[nextSetNum] || [])];
       if (!nextSetExercises.includes(exerciseId)) {
         nextSetExercises.push(exerciseId);
-        newData[blockType] = { ...newData[blockType], [nextSetNum]: nextSetExercises };
+        return { ...b, exercises: { ...b.exercises, [nextSetNum]: nextSetExercises } };
       }
-      return newData;
-    });
+      return b;
+    }));
   };
 
   // Open create exercise modal
-  const openCreateExercise = (blockType: BlockType, setNum: number) => {
-    const blockConfig = BLOCK_TYPES.find(b => b.type === blockType);
-    setCreateForBlock(blockType);
+  const openCreateExercise = (blockId: string, setNum: number) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const config = BLOCK_TYPE_CONFIG[block.type];
+    setCreateForBlockId(blockId);
     setCreateForSet(setNum);
     setNewExerciseName('');
-    setNewExerciseArea(blockConfig?.areas[0] || 'core');
+    setNewExerciseArea(config.areas[0] || 'core');
     setNewExerciseEquipment('bodyweight');
     setNewExerciseReps('');
     setNewExerciseDuration('');
@@ -221,7 +268,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
 
   // Handle creating a new exercise
   const handleCreateExercise = () => {
-    if (!newExerciseName.trim() || !createForBlock || createForSet === null) return;
+    if (!newExerciseName.trim() || !createForBlockId || createForSet === null) return;
 
     const newExercise = addCustomExercise({
       name: newExerciseName.trim(),
@@ -231,111 +278,85 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
       defaultDuration: newExerciseDuration ? parseInt(newExerciseDuration) : undefined,
     });
 
-    // Refresh the exercise list
     setExerciseListKey(k => k + 1);
-
-    // Add the new exercise to the current block/set
-    addExercise(createForBlock, createForSet, newExercise.id);
-
-    // Close the modal
+    addExercise(createForBlockId, createForSet, newExercise.id);
     setShowCreateExercise(false);
-    setCreateForBlock(null);
+    setCreateForBlockId(null);
     setCreateForSet(null);
-
-    // Prompt anonymous users to sign up after creating a custom exercise
     triggerSignUpPrompt('exercise');
   };
 
   // Get filtered exercises for adding
-  const getFilteredExercises = (blockType: BlockType, setNum: number) => {
-    const blockConfig = BLOCK_TYPES.find(b => b.type === blockType);
-    if (!blockConfig) return [];
-    const existingIds = new Set(blockExercises[blockType][setNum] || []);
+  const getFilteredExercises = (blockId: string, setNum: number) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return [];
+    const config = BLOCK_TYPE_CONFIG[block.type];
+    const existingIds = new Set(block.exercises[setNum] || []);
     return exercises.filter(e => {
       if (existingIds.has(e.id)) return false;
-      if (!blockConfig.areas.includes(e.area)) return false;
+      if (!config.areas.includes(e.area)) return false;
       if (!exerciseSearch) return true;
       return e.name.toLowerCase().includes(exerciseSearch.toLowerCase());
     }).slice(0, 10);
   };
 
   // Get exercise count for a block
-  const getBlockExerciseCount = (blockType: BlockType) => {
-    const blockData = blockExercises[blockType];
+  const getBlockExerciseCount = (block: BuilderBlock) => {
     const unique = new Set<string>();
-    Object.values(blockData).forEach(ids => ids.forEach(id => unique.add(id)));
+    Object.values(block.exercises).forEach(ids => ids.forEach(id => unique.add(id)));
     return unique.size;
   };
 
   // Get total exercise count
   const totalExercises = useMemo(() => {
     let count = 0;
-    Object.values(blockExercises).forEach(blockData => {
+    blocks.forEach(block => {
       const unique = new Set<string>();
-      Object.values(blockData).forEach(ids => ids.forEach(id => unique.add(id)));
+      Object.values(block.exercises).forEach(ids => ids.forEach(id => unique.add(id)));
       count += unique.size;
     });
     return count;
-  }, [blockExercises]);
+  }, [blocks]);
 
   // Build workout blocks and start
   const handleStart = () => {
-    const blocks: WorkoutBlock[] = [];
+    const workoutBlocks: WorkoutBlock[] = [];
 
-    BLOCK_TYPES.forEach((bt, index) => {
-      const blockData = blockExercises[bt.type];
-      const isStrength = bt.type === 'strength';
+    blocks.forEach((block) => {
+      const config = BLOCK_TYPE_CONFIG[block.type];
+      const setCount = Object.keys(block.exercises).length;
+      const flatExercises: WorkoutExercise[] = [];
 
-      if (isStrength) {
-        const flatExercises: WorkoutExercise[] = [];
-        for (let setNum = 1; setNum <= DEFAULT_SET_COUNT; setNum++) {
-          const setExerciseIds = blockData[setNum] || [];
-          setExerciseIds.forEach(id => {
-            const exercise = getExerciseById(id);
-            flatExercises.push({
-              exerciseId: id,
-              weight: exercise?.defaultWeight,
-              reps: exercise?.defaultReps,
-              duration: exercise?.defaultDuration,
-              sets: setNum,
-            });
+      for (let setNum = 1; setNum <= setCount; setNum++) {
+        const setExerciseIds = block.exercises[setNum] || [];
+        setExerciseIds.forEach(id => {
+          const exercise = getExerciseById(id);
+          flatExercises.push({
+            exerciseId: id,
+            weight: exercise?.defaultWeight,
+            reps: exercise?.defaultReps,
+            duration: exercise?.defaultDuration,
+            sets: setCount > 1 ? setNum : undefined,
           });
-        }
-        if (flatExercises.length > 0) {
-          blocks.push({
-            id: `${bt.type}-${index}`,
-            type: bt.type,
-            name: bt.label,
-            exercises: flatExercises,
-          });
-        }
-      } else {
-        const exerciseIds = blockData[1] || [];
-        if (exerciseIds.length > 0) {
-          blocks.push({
-            id: `${bt.type}-${index}`,
-            type: bt.type,
-            name: bt.label,
-            exercises: exerciseIds.map(id => {
-              const exercise = getExerciseById(id);
-              return {
-                exerciseId: id,
-                weight: exercise?.defaultWeight,
-                reps: exercise?.defaultReps,
-                duration: exercise?.defaultDuration,
-              };
-            }),
-          });
-        }
+        });
+      }
+
+      if (flatExercises.length > 0) {
+        workoutBlocks.push({
+          id: block.id,
+          type: block.type,
+          name: config.label,
+          exercises: flatExercises,
+        });
       }
     });
 
-    if (blocks.length === 0) {
-      alert('Please select at least one exercise');
+    if (workoutBlocks.length === 0) {
+      alert('Please add at least one block with exercises');
       return;
     }
 
-    onStart(blocks);
+    onStart(workoutBlocks);
   };
 
   return (
@@ -346,7 +367,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
             <img src="/logo_icon.png" alt="Moove" className="h-9 dark:invert" />
             <div>
               <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Build Workout</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Add exercises to each block</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Add blocks and exercises</p>
             </div>
           </div>
           <button
@@ -361,56 +382,93 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
       </header>
 
       <div className="space-y-4 flex-1">
-        {BLOCK_TYPES.map((blockConfig) => {
-          const isStrength = blockConfig.type === 'strength';
-          const sets = isStrength ? [1, 2, 3] : [1];
-          const exerciseCount = getBlockExerciseCount(blockConfig.type);
+        {blocks.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
+              <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+            </div>
+            <p className="text-slate-500 dark:text-slate-400 mb-2">No blocks yet</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">Add a block to start building your workout</p>
+          </div>
+        )}
+
+        {blocks.map((block, blockIdx) => {
+          const config = BLOCK_TYPE_CONFIG[block.type];
+          const setCount = Object.keys(block.exercises).length;
+          const sets = Array.from({ length: setCount }, (_, i) => i + 1);
+          const exerciseCount = getBlockExerciseCount(block);
 
           return (
-            <div key={blockConfig.type} className="rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div key={block.id} className="rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
               {/* Block Header */}
               <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800 dark:to-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 dark:text-slate-400">
-                      {getBlockIcon(blockConfig.type)}
+                      {getBlockIcon(block.type)}
                     </span>
-                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">{blockConfig.label}</h3>
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">{config.label}</h3>
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+                      {exerciseCount} exercise{exerciseCount !== 1 ? 's' : ''}{setCount > 1 ? ` · ${setCount} sets` : ''}
+                    </span>
                   </div>
-                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-                    {exerciseCount} exercise{exerciseCount !== 1 ? 's' : ''}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => moveBlock(block.id, 'up')}
+                      disabled={blockIdx === 0}
+                      className={`p-1.5 rounded transition-colors ${blockIdx === 0 ? 'text-slate-200 dark:text-slate-700' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => moveBlock(block.id, 'down')}
+                      disabled={blockIdx === blocks.length - 1}
+                      className={`p-1.5 rounded transition-colors ${blockIdx === blocks.length - 1 ? 'text-slate-200 dark:text-slate-700' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => removeBlock(block.id)}
+                      className="p-1.5 rounded text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Sets */}
               <div className="p-4 space-y-5">
                 {sets.map((setNum) => {
-                  const setExercises = blockExercises[blockConfig.type][setNum] || [];
-                  const isAddingHere = addingToBlock === blockConfig.type && addingToSet === setNum;
-                  const filteredExercises = isAddingHere ? getFilteredExercises(blockConfig.type, setNum) : [];
+                  const setExercises = block.exercises[setNum] || [];
+                  const isAddingHere = addingToBlockId === block.id && addingToSet === setNum;
+                  const filteredExercises = isAddingHere ? getFilteredExercises(block.id, setNum) : [];
 
                   return (
-                    <div key={setNum} className={`rounded-xl ${isStrength ? 'bg-slate-50/50 dark:bg-slate-900/30 p-3' : ''}`}>
-                      {/* Set with vertical bar */}
+                    <div key={setNum} className={`rounded-xl ${setCount > 1 ? 'bg-slate-50/50 dark:bg-slate-900/30 p-3' : ''}`}>
                       <div className="flex">
-                        {/* Vertical bar column */}
                         <div className="flex flex-col items-center mr-3">
                           <div className="w-1.5 h-6 rounded-full bg-emerald-500 shrink-0" />
                           <div className="w-1.5 flex-1 rounded-full bg-emerald-200 dark:bg-emerald-800" />
                         </div>
 
-                        {/* Content column */}
                         <div className="flex-1 min-w-0">
-                          {/* Set Header */}
                           <div className="flex items-center justify-between mb-3 h-6">
                             <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                              {isStrength ? `Set ${setNum}` : 'Exercises'}
+                              {setCount > 1 ? `Set ${setNum}` : 'Exercises'}
                             </span>
                             {!isAddingHere && (
                               <button
                                 onClick={() => {
-                                  setAddingToBlock(blockConfig.type);
+                                  setAddingToBlockId(block.id);
                                   setAddingToSet(setNum);
                                   setExerciseSearch('');
                                 }}
@@ -424,7 +482,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                             )}
                           </div>
 
-                          {/* Exercise List */}
                           <div className="space-y-1">
                             {setExercises.length === 0 && !isAddingHere && (
                               <div className="py-4 text-center text-sm text-slate-400 dark:text-slate-500">
@@ -437,17 +494,12 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                               const areaColorClass = exercise?.area ? getAreaColor(exercise.area) : '';
                               const isFirst = exerciseIdx === 0;
                               const isLast = exerciseIdx === setExercises.length - 1;
-
-                              const isSwiping = swipingExercise?.blockType === blockConfig.type &&
+                              const isSwiping = swipingExercise?.blockId === block.id &&
                                 swipingExercise?.setNum === setNum &&
                                 swipingExercise?.exerciseIdx === exerciseIdx;
 
                               return (
-                                <div
-                                  key={`${exerciseId}-${exerciseIdx}`}
-                                  className="relative overflow-hidden rounded-lg"
-                                >
-                                  {/* Delete background - only show when swiping */}
+                                <div key={`${exerciseId}-${exerciseIdx}`} className="relative overflow-hidden rounded-lg">
                                   {isSwiping && (
                                     <div className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-end pr-4">
                                       <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,18 +508,16 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                     </div>
                                   )}
 
-                                  {/* Exercise card */}
                                   <div
-                                    onTouchStart={(e) => handleTouchStart(e, blockConfig.type, setNum, exerciseIdx, e.currentTarget)}
+                                    onTouchStart={(e) => handleTouchStart(e, block.id, setNum, exerciseIdx, e.currentTarget)}
                                     onTouchMove={handleTouchMove}
                                     onTouchEnd={handleTouchEnd}
                                     className="relative flex items-center gap-2 p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm"
                                     style={{ willChange: 'transform' }}
                                   >
-                                    {/* Reorder buttons */}
                                     <div className="shrink-0 flex flex-col -my-1">
                                       <button
-                                        onClick={() => moveExercise(blockConfig.type, setNum, exerciseIdx, 'up')}
+                                        onClick={() => moveExercise(block.id, setNum, exerciseIdx, 'up')}
                                         disabled={isFirst}
                                         className={`p-0.5 rounded transition-colors ${isFirst ? 'text-slate-200 dark:text-slate-700' : 'text-slate-400 hover:text-emerald-500 dark:text-slate-500 dark:hover:text-emerald-400 active:scale-90'}`}
                                       >
@@ -476,7 +526,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                         </svg>
                                       </button>
                                       <button
-                                        onClick={() => moveExercise(blockConfig.type, setNum, exerciseIdx, 'down')}
+                                        onClick={() => moveExercise(block.id, setNum, exerciseIdx, 'down')}
                                         disabled={isLast}
                                         className={`p-0.5 rounded transition-colors ${isLast ? 'text-slate-200 dark:text-slate-700' : 'text-slate-400 hover:text-emerald-500 dark:text-slate-500 dark:hover:text-emerald-400 active:scale-90'}`}
                                       >
@@ -485,7 +535,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                         </svg>
                                       </button>
                                     </div>
-                                    {/* Movement type badge - colored */}
                                     {areaLabel && (
                                       <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${areaColorClass}`}>
                                         {areaLabel}
@@ -498,12 +547,11 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                       {exercise?.defaultReps && `${exercise.defaultReps} reps`}
                                       {exercise?.defaultDuration && `${exercise.defaultDuration}s`}
                                     </span>
-                                    {/* Copy to next set - only for strength block and not last set */}
-                                    {isStrength && setNum < DEFAULT_SET_COUNT && (
+                                    {setCount > 1 && setNum < setCount && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          copyToNextSet(blockConfig.type, setNum, exerciseId);
+                                          copyToNextSet(block.id, setNum, exerciseId);
                                         }}
                                         className="shrink-0 p-1.5 text-slate-400 hover:text-emerald-500 dark:text-slate-500 dark:hover:text-emerald-400 transition-colors"
                                         title="Copy to next set"
@@ -518,7 +566,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                               );
                             })}
 
-                            {/* Add exercise inline */}
                             {isAddingHere && (
                               <div className="mt-3 p-4 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="relative">
@@ -536,16 +583,16 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                 </div>
                                 <div className="mt-3 max-h-64 overflow-y-auto space-y-1">
                                   {filteredExercises.map(ex => {
-                                    const areaLabel = ex.area.charAt(0).toUpperCase() + ex.area.slice(1);
-                                    const areaColorClass = getAreaColor(ex.area);
+                                    const exAreaLabel = ex.area.charAt(0).toUpperCase() + ex.area.slice(1);
+                                    const exAreaColorClass = getAreaColor(ex.area);
                                     return (
                                       <button
                                         key={ex.id}
-                                        onClick={() => addExercise(blockConfig.type, setNum, ex.id)}
+                                        onClick={() => addExercise(block.id, setNum, ex.id)}
                                         className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                       >
-                                        <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${areaColorClass}`}>
-                                          {areaLabel}
+                                        <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded ${exAreaColorClass}`}>
+                                          {exAreaLabel}
                                         </span>
                                         <span className="text-base font-medium text-slate-700 dark:text-slate-200">{ex.name}</span>
                                       </button>
@@ -554,9 +601,8 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                   {filteredExercises.length === 0 && exerciseSearch && (
                                     <div className="py-4 text-center text-sm text-slate-400">No exercises found</div>
                                   )}
-                                  {/* Create New Exercise button */}
                                   <button
-                                    onClick={() => openCreateExercise(blockConfig.type, setNum)}
+                                    onClick={() => openCreateExercise(block.id, setNum)}
                                     className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors mt-2"
                                   >
                                     <span className="shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -568,7 +614,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                                   </button>
                                 </div>
                                 <button
-                                  onClick={() => { setAddingToBlock(null); setAddingToSet(null); }}
+                                  onClick={() => { setAddingToBlockId(null); setAddingToSet(null); }}
                                   className="mt-3 w-full py-2.5 text-sm font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
                                 >
                                   Done
@@ -581,10 +627,50 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                     </div>
                   );
                 })}
+
+                {/* Add/Remove Set Controls */}
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    onClick={() => removeSetFromBlock(block.id)}
+                    disabled={setCount <= 1}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                      setCount <= 1
+                        ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                    </svg>
+                    Remove Set
+                  </button>
+                  <button
+                    onClick={() => addSetToBlock(block.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Set
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
+
+        {/* Add Block Button */}
+        <button
+          onClick={() => setShowBlockPicker(true)}
+          className="w-full p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-colors"
+        >
+          <div className="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="font-medium">Add Block</span>
+          </div>
+        </button>
       </div>
 
       <div className="mt-8">
@@ -599,11 +685,75 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
         </Button>
       </div>
 
+      {/* Block Picker Modal */}
+      {showBlockPicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={() => { setShowBlockPicker(false); setSelectedBlockTypes(new Set()); }}>
+          <div className="bg-white dark:bg-slate-800 rounded-t-2xl w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 text-center">Add Blocks</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-1">Select one or more block types</p>
+            </div>
+            <div className="p-4 space-y-2">
+              {(Object.keys(BLOCK_TYPE_CONFIG) as BlockType[]).map(type => {
+                const config = BLOCK_TYPE_CONFIG[type];
+                const isSelected = selectedBlockTypes.has(type);
+                return (
+                  <button
+                    key={type}
+                    onClick={() => toggleBlockType(type)}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-500'
+                        : 'bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      isSelected
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}>
+                      {getBlockIcon(type)}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="font-medium text-slate-900 dark:text-slate-100">{config.label}</div>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">
+                        {config.areas.slice(0, 3).map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ')}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <span className="material-symbols-outlined text-emerald-500" style={{ fontSize: '24px' }}>check_circle</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-3">
+              <button
+                onClick={() => { setShowBlockPicker(false); setSelectedBlockTypes(new Set()); }}
+                className="flex-1 py-3 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addSelectedBlocks}
+                disabled={selectedBlockTypes.size === 0}
+                className={`flex-1 py-3 rounded-xl font-medium transition-colors ${
+                  selectedBlockTypes.size === 0
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                    : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                }`}
+              >
+                Add {selectedBlockTypes.size > 0 ? `${selectedBlockTypes.size} Block${selectedBlockTypes.size > 1 ? 's' : ''}` : 'Blocks'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Exercise Modal */}
       {showCreateExercise && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
-            {/* Modal Header */}
             <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create Exercise</h3>
               <button
@@ -616,9 +766,7 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-5 space-y-4">
-              {/* Exercise Name */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Exercise Name *
@@ -633,7 +781,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                 />
               </div>
 
-              {/* Movement Area */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Movement Type
@@ -656,7 +803,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                 </select>
               </div>
 
-              {/* Equipment */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Equipment
@@ -677,7 +823,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
                 </select>
               </div>
 
-              {/* Reps or Duration - side by side */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
@@ -713,7 +858,6 @@ export function WorkoutBuilder({ onStart, onCancel }: WorkoutBuilderProps) {
               <p className="text-xs text-slate-400 dark:text-slate-500">Set either reps or duration, not both</p>
             </div>
 
-            {/* Modal Footer */}
             <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-700 flex gap-3">
               <button
                 onClick={() => setShowCreateExercise(false)}
