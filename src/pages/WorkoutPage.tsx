@@ -7,6 +7,7 @@ import { CowCelebration } from '../components/CowCelebration';
 import { CardioWorkoutView } from '../components/CardioWorkoutView';
 import { getExerciseById, getAllExercises } from '../data/exercises';
 import { incrementSkipCount, incrementSwapCount } from '../data/storage';
+import { useLandscape } from '../hooks/useLandscape';
 
 // Extended session type with persisted state
 interface ExtendedSession extends WorkoutSession {
@@ -48,6 +49,8 @@ export function WorkoutPage({
   onUpdateSessionBlocks,
 }: WorkoutPageProps) {
   // === ALL HOOKS MUST BE AT THE TOP ===
+  const { isLandscape } = useLandscape();
+
   // Initialize swapped exercises from session (for persistence)
   const [swappedExercises, setSwappedExercises] = useState<Record<string, string>>(
     () => session?.swappedExercises ?? {}
@@ -55,7 +58,12 @@ export function WorkoutPage({
   const [showComplete, setShowComplete] = useState(false);
   const [finalEffort, setFinalEffort] = useState<EffortLevel | undefined>();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showPauseMenu, setShowPauseMenu] = useState(false);
+  const [showLandscapeTip, setShowLandscapeTip] = useState(false);
+  const [hasSeenLandscapeTip, setHasSeenLandscapeTip] = useState(false);
+  const [wasPortrait, setWasPortrait] = useState(!isLandscape);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [pausedTime, setPausedTime] = useState(0); // Accumulated paused time
   const [expandedUpcoming, setExpandedUpcoming] = useState<Set<number>>(new Set([0]));
   const [showCowCelebration, setShowCowCelebration] = useState(false);
   const [editingGroup, setEditingGroup] = useState<number | null>(null);
@@ -69,15 +77,26 @@ export function WorkoutPage({
   const currentSetNumber = currentExercise?.sets;
   const swapKey = `${currentBlockIndex}-${currentExerciseIndex}`;
 
-  // Track elapsed time
+  // Track elapsed time (pauses when menu is open)
   useEffect(() => {
-    if (!session) return;
+    if (!session || showPauseMenu) return;
     const startTime = new Date(session.startedAt).getTime();
-    const updateElapsed = () => setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+    const updateElapsed = () => setElapsedTime(Math.floor((Date.now() - startTime - pausedTime) / 1000));
     updateElapsed();
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
-  }, [session]);
+  }, [session, showPauseMenu, pausedTime]);
+
+  // Track paused duration
+  const [pauseStartTime, setPauseStartTime] = useState<number | null>(null);
+  useEffect(() => {
+    if (showPauseMenu && !pauseStartTime) {
+      setPauseStartTime(Date.now());
+    } else if (!showPauseMenu && pauseStartTime) {
+      setPausedTime(prev => prev + (Date.now() - pauseStartTime));
+      setPauseStartTime(null);
+    }
+  }, [showPauseMenu, pauseStartTime]);
 
   // Auto-show completion if workout ended (no more exercises)
   useEffect(() => {
@@ -85,6 +104,15 @@ export function WorkoutPage({
       setShowComplete(true);
     }
   }, [session, blocks.length, currentBlock, showComplete]);
+
+  // Show landscape tip when rotating to landscape (once per session)
+  useEffect(() => {
+    if (isLandscape && wasPortrait && !hasSeenLandscapeTip) {
+      setShowLandscapeTip(true);
+      setHasSeenLandscapeTip(true);
+    }
+    setWasPortrait(!isLandscape);
+  }, [isLandscape, wasPortrait, hasSeenLandscapeTip]);
 
   // Build timeline segments - grouped by block
   const timelineBlocks = useMemo(() => {
@@ -478,81 +506,365 @@ export function WorkoutPage({
 
   const isFirstExercise = currentBlockIndex === 0 && currentExerciseIndex === 0;
 
-  return (
-    <div className="min-h-screen flex flex-col pb-20 bg-slate-100 dark:bg-slate-950">
-      {/* Top Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 safe-top">
-        <div className="flex justify-between items-center px-4 py-3">
-          <button
-            onClick={() => setShowCancelConfirm(true)}
-            className="p-2 -ml-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <img src="/logo_icon.png" alt="Moove" className="h-8 dark:invert" />
-          <button
-            onClick={() => setShowComplete(true)}
-            className="px-3 py-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg text-sm font-medium"
-          >
-            Finish
-          </button>
-        </div>
-      </div>
+  // Shared progress bar component
+  const ProgressBar = ({ compact = false }: { compact?: boolean }) => {
+    // Build counter text for current block
+    const counterText = hasMultipleSets && currentSetNumber
+      ? `${exerciseIndexInSet} of ${exercisesInCurrentSet.length}`
+      : `${currentExerciseIndex + 1} of ${currentBlock.exercises.length}`;
 
-      {/* Progress Card */}
-      <div className="px-4 pt-4">
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex gap-1 mb-2">
-            {timelineBlocks.map((block, idx) => {
-              let progressPercent = 0;
-              if (block.isComplete) {
-                progressPercent = 100;
-              } else if (block.isCurrent && currentBlock) {
-                progressPercent = (currentExerciseIndex / currentBlock.exercises.length) * 100;
-              }
+    return (
+      <div className={`${compact ? 'p-3' : 'p-4'} rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm`}>
+        <div className="flex gap-2 items-center">
+          {timelineBlocks.map((block, idx) => {
+            let progressPercent = 0;
+            if (block.isComplete) {
+              progressPercent = 100;
+            } else if (block.isCurrent && currentBlock) {
+              progressPercent = (currentExerciseIndex / currentBlock.exercises.length) * 100;
+            }
+
+            if (block.isCurrent) {
+              // Current block: large pill with counter inside
               return (
-                <div key={idx} className="flex-1">
-                  <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                    <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+                <div key={idx} className="flex-[1.8]">
+                  <div className="h-6 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden relative">
+                    <div className="h-full bg-emerald-500 transition-all duration-300 rounded-full" style={{ width: `${progressPercent}%` }} />
+                    <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white drop-shadow-sm">
+                      {counterText}
+                    </span>
                   </div>
-                  <div className={`text-[10px] mt-1 text-center truncate ${
-                    block.isCurrent ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                      : block.isComplete ? 'text-slate-500 dark:text-slate-400'
-                      : 'text-slate-400 dark:text-slate-500'
-                  }`}>
+                  <div className="mt-1 text-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold truncate">
                     {block.name}
                   </div>
                 </div>
               );
-            })}
+            }
+
+            // Other blocks: simple thin bar
+            return (
+              <div key={idx} className="flex-1">
+                <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                  <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className={`mt-1 text-center text-[10px] truncate ${
+                  block.isComplete ? 'text-slate-500 dark:text-slate-400'
+                    : 'text-slate-400 dark:text-slate-500'
+                }`}>
+                  {block.name}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Only show set info if there are multiple sets */}
+        {hasMultipleSets && currentSetNumber && (
+          <div className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+            Set {currentSetNumber} of {totalSetsInBlock}
           </div>
-          <div className="flex items-center justify-between mt-3">
-            <div>
-              <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentBlock.name}</div>
-              {hasMultipleSets && currentSetNumber && (
-                <div className="text-sm text-slate-500 dark:text-slate-400">Set {currentSetNumber} of {totalSetsInBlock}</div>
-              )}
+        )}
+      </div>
+    );
+  };
+
+  // Shared header component
+  const Header = ({ compact = false }: { compact?: boolean }) => (
+    <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 safe-top">
+      <div className={`flex justify-between items-center px-4 ${compact ? 'py-2' : 'py-3'}`}>
+        <img src="/logo_icon.png" alt="Moove" className={`${compact ? 'h-6' : 'h-8'} dark:invert`} />
+        <span className="text-lg text-slate-600 dark:text-slate-400 tabular-nums font-medium">{formatElapsedTime(elapsedTime)}</span>
+        <button
+          onClick={() => setShowPauseMenu(true)}
+          className="p-2 -mr-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          title="Pause workout"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+
+  // === LANDSCAPE LAYOUT ===
+  if (isLandscape) {
+    return (
+      <div className="h-screen flex flex-col bg-slate-100 dark:bg-slate-950 overflow-hidden">
+        {/* Thin progress bar at top */}
+        <div className="px-4 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-4">
+            {/* Timer */}
+            <span className="text-sm text-slate-600 dark:text-slate-400 tabular-nums font-medium">{formatElapsedTime(elapsedTime)}</span>
+            {/* Block progress */}
+            <div className="flex-1 flex gap-1 items-center">
+              {timelineBlocks.map((block, idx) => {
+                let progressPercent = 0;
+                if (block.isComplete) {
+                  progressPercent = 100;
+                } else if (block.isCurrent && currentBlock) {
+                  progressPercent = (currentExerciseIndex / currentBlock.exercises.length) * 100;
+                }
+                // Build counter text for current block
+                const counterText = hasMultipleSets && currentSetNumber
+                  ? `${exerciseIndexInSet} of ${exercisesInCurrentSet.length}`
+                  : `${currentExerciseIndex + 1} of ${currentBlock.exercises.length}`;
+
+                if (block.isCurrent) {
+                  // Current block: pill with counter inside
+                  return (
+                    <div key={idx} className="flex-[1.8]">
+                      <div className="h-5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden relative">
+                        <div className="h-full bg-emerald-500 transition-all duration-300 rounded-full" style={{ width: `${progressPercent}%` }} />
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white drop-shadow-sm">
+                          {counterText}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-center text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold truncate">
+                        {block.name}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Other blocks: simple thin bar
+                return (
+                  <div key={idx} className="flex-1">
+                    <div className="h-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                      <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+                    </div>
+                    <div className={`mt-0.5 text-center text-[9px] truncate ${
+                      block.isComplete ? 'text-slate-500 dark:text-slate-400'
+                        : 'text-slate-400 dark:text-slate-500'
+                    }`}>
+                      {block.name}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-lg font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
-                  {formatElapsedTime(elapsedTime)}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">elapsed</div>
+            {/* Pause button */}
+            <button
+              onClick={() => setShowPauseMenu(true)}
+              className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title="Pause workout"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Pause Menu Popup */}
+        {showPauseMenu && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowPauseMenu(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Workout Paused</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  {formatElapsedTime(elapsedTime)} elapsed • {completedCount} exercises done
+                </p>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {hasMultipleSets && currentSetNumber
-                    ? `${exerciseIndexInSet}/${exercisesInCurrentSet.length}`
-                    : `${currentExerciseIndex + 1}/${currentBlock.exercises.length}`}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">exercises</div>
+              <div className="p-2">
+                <button
+                  onClick={() => setShowPauseMenu(false)}
+                  className="w-full px-4 py-3 text-left rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  <span className="text-slate-900 dark:text-slate-100 font-medium">Keep Going</span>
+                </button>
+                <button
+                  onClick={() => { setShowPauseMenu(false); setShowComplete(true); }}
+                  className="w-full px-4 py-3 text-left rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-slate-900 dark:text-slate-100 font-medium">Finish Workout</span>
+                </button>
+                <button
+                  onClick={() => { setShowPauseMenu(false); onCancelWorkout(); }}
+                  className="w-full px-4 py-3 text-left rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span className="text-red-600 dark:text-red-400 font-medium">Cancel Workout</span>
+                </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Landscape Tip */}
+        {showLandscapeTip && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowLandscapeTip(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-xs w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 5H3c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-2 12H5V7h14v10z"/>
+                  </svg>
+                </div>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">TV Mode</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                  For mirroring to a TV, enable orientation lock on your device to prevent unwanted rotation.
+                </p>
+                <button
+                  onClick={() => setShowLandscapeTip(false)}
+                  className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main content - 50/50 split */}
+        <div className="flex-1 flex gap-4 p-4 min-h-0">
+          {/* Left Panel - Exercise Card (scrollable) */}
+          <div className="w-1/2 flex flex-col min-h-0">
+            <div className="flex-1 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none overflow-y-auto scrollbar-hide">
+              <ExerciseView
+                workoutExercise={effectiveExercise}
+                onComplete={handleComplete}
+                onSkip={handleSkip}
+                onSwapExercise={handleSwap}
+                onBack={handleBack}
+                canGoBack={!isFirstExercise}
+                compact
+              />
+            </div>
+          </div>
+
+          {/* Right Panel - Up Next */}
+          <div className="w-1/2 flex flex-col min-h-0">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-3">Up Next</h2>
+            <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2">
+              {upcomingGroups.map((group, groupIdx) => {
+                const isExpanded = expandedUpcoming.has(groupIdx);
+                const toggleExpand = () => {
+                  setExpandedUpcoming(prev => {
+                    const next = new Set(prev);
+                    if (next.has(groupIdx)) next.delete(groupIdx);
+                    else next.add(groupIdx);
+                    return next;
+                  });
+                };
+                return (
+                  <div key={groupIdx} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                    <button onClick={toggleExpand} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left">
+                      <div>
+                        <span className={`text-sm font-medium ${group.type === 'set' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {group.label}
+                        </span>
+                        {group.remainingCount > 0 && (
+                          <span className="text-xs text-slate-400 dark:text-slate-500 ml-2">
+                            {group.remainingCount} remaining
+                          </span>
+                        )}
+                      </div>
+                      <svg className={`w-5 h-5 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {isExpanded && (
+                      <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex flex-wrap gap-1.5">
+                          {group.exercises.map((ex, exIdx) => (
+                            <span
+                              key={exIdx}
+                              className={`px-2 py-0.5 text-xs rounded-md transition-colors flex items-center gap-1 ${
+                                ex.isCompleted
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                  : ex.isCurrent
+                                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 ring-2 ring-amber-400 dark:ring-amber-500'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              {ex.isCompleted && (
+                                <svg className="w-2.5 h-2.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                              {ex.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {completedCount > 0 && (
+                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 pt-2">
+                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {completedCount} exercise{completedCount !== 1 ? 's' : ''} completed
+                </div>
+              )}
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // === PORTRAIT LAYOUT (original) ===
+  return (
+    <div className="min-h-screen flex flex-col pb-20 bg-slate-100 dark:bg-slate-950">
+      <Header />
+
+      {/* Pause Menu Popup */}
+      {showPauseMenu && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowPauseMenu(false)}>
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-sm w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Workout Paused</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                {formatElapsedTime(elapsedTime)} elapsed • {completedCount} exercises done
+              </p>
+            </div>
+            <div className="p-2">
+              <button
+                onClick={() => setShowPauseMenu(false)}
+                className="w-full px-4 py-3 text-left rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-3"
+              >
+                <svg className="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <span className="text-slate-900 dark:text-slate-100 font-medium">Keep Going</span>
+              </button>
+              <button
+                onClick={() => { setShowPauseMenu(false); setShowComplete(true); }}
+                className="w-full px-4 py-3 text-left rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-3"
+              >
+                <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-slate-900 dark:text-slate-100 font-medium">Finish Workout</span>
+              </button>
+              <button
+                onClick={() => { setShowPauseMenu(false); onCancelWorkout(); }}
+                className="w-full px-4 py-3 text-left rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-3"
+              >
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="text-red-600 dark:text-red-400 font-medium">Cancel Workout</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Card */}
+      <div className="px-4 pt-4">
+        <ProgressBar />
       </div>
 
       {/* Scrollable Content */}

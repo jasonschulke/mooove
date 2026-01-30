@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import type { WorkoutBlock, EffortLevel, CardioType } from './types';
 import { useWorkout } from './hooks/useWorkout';
+import { useLandscape } from './hooks/useLandscape';
 import { seedDefaultWorkouts } from './data/storage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SignUpPromptProvider, useSignUpPrompt } from './contexts/SignUpPromptContext';
@@ -47,6 +48,7 @@ function AppContent() {
     return (saved as Theme) || 'dark';
   });
   const workout = useWorkout();
+  const { isLandscape } = useLandscape();
   const { user, setSyncStatus } = useAuth();
   const { triggerSignUpPrompt } = useSignUpPrompt();
 
@@ -213,11 +215,14 @@ function AppContent() {
 
       {currentPage === 'settings' && <SettingsPage theme={theme} onToggleTheme={toggleTheme} />}
 
-      <NavBar
-        currentPage={currentPage}
-        onNavigate={setCurrentPage}
-        hasActiveWorkout={!!workout.session && ((workout.session.blocks?.length ?? 0) > 0 || !!workout.session.cardioType)}
-      />
+      {/* Hide NavBar in landscape mode during active workout */}
+      {!(isLandscape && currentPage === 'workout' && workout.session && ((workout.session.blocks?.length ?? 0) > 0 || !!workout.session.cardioType)) && (
+        <NavBar
+          currentPage={currentPage}
+          onNavigate={setCurrentPage}
+          hasActiveWorkout={!!workout.session && ((workout.session.blocks?.length ?? 0) > 0 || !!workout.session.cardioType)}
+        />
+      )}
     </div>
   );
 }
