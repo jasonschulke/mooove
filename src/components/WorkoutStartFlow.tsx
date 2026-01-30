@@ -1,22 +1,37 @@
 import { useMemo, useState } from 'react';
-import type { WorkoutBlock, SavedWorkout, CardioType } from '../types';
+import type { WorkoutBlock, SavedWorkout, CardioType, BlockType } from '../types';
 import { CARDIO_TYPE_LABELS } from '../types';
 import { getLastWorkout, loadSavedWorkouts } from '../data/storage';
 import { getExerciseById } from '../data/exercises';
 
-// Material icons for cardio types
-const CARDIO_ICONS: Record<CardioType, string> = {
-  'walk': 'directions_walk',
-  'run': 'sprint',
-  'trail-run': 'directions_run',
-  'hike': 'hiking',
+// Material icons for cardio types with colors
+const CARDIO_CONFIG: Record<CardioType, { icon: string; color: string }> = {
+  'walk': { icon: 'directions_walk', color: 'text-emerald-500' },
+  'run': { icon: 'sprint', color: 'text-orange-500' },
+  'trail-run': { icon: 'directions_run', color: 'text-amber-600' },
+  'hike': { icon: 'hiking', color: 'text-green-600' },
+};
+
+// Block type icons for workout preview
+const BLOCK_TYPE_ICONS: Record<BlockType, string> = {
+  warmup: 'physical_therapy',
+  strength: 'exercise',
+  conditioning: 'ecg_heart',
+  cardio: 'directions_run',
+  cooldown: 'self_improvement',
+};
+
+// Get unique block types from a workout
+const getBlockTypes = (blocks: WorkoutBlock[]): BlockType[] => {
+  const types = new Set<BlockType>();
+  blocks.forEach(block => types.add(block.type));
+  return Array.from(types);
 };
 
 interface WorkoutStartFlowProps {
   onStartLastWorkout: (blocks: WorkoutBlock[]) => void;
   onCreateNew: () => void;
   onStartSavedWorkout: (workout: SavedWorkout) => void;
-  onPreviewWorkout: (workout: SavedWorkout) => void;
   onStartCardio: (type: CardioType) => void;
   onManageLibrary: () => void;
 }
@@ -25,7 +40,6 @@ export function WorkoutStartFlow({
   onStartLastWorkout,
   onCreateNew,
   onStartSavedWorkout,
-  onPreviewWorkout,
   onStartCardio,
   onManageLibrary,
 }: WorkoutStartFlowProps) {
@@ -124,28 +138,45 @@ export function WorkoutStartFlow({
               {savedWorkouts.slice(0, 5).map(workout => (
                 <div
                   key={workout.id}
-                  className="flex items-center gap-2 p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
+                  className="flex items-center gap-3 p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
                 >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-900 dark:text-slate-100">{workout.name}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-0.5">
+                        {getBlockTypes(workout.blocks).map((type) => (
+                          <span
+                            key={type}
+                            className="material-symbols-outlined text-slate-400 dark:text-slate-500"
+                            style={{ fontSize: '16px' }}
+                            title={type}
+                          >
+                            {BLOCK_TYPE_ICONS[type]}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {getExerciseCount(workout.blocks)} exercises
+                        {workout.estimatedMinutes && ` • ~${workout.estimatedMinutes} min`}
+                      </span>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setPreviewWorkout(workout)}
-                    className="p-2 -ml-2 text-slate-400 hover:text-emerald-500 dark:text-slate-500 dark:hover:text-emerald-400 transition-colors"
+                    className="p-2 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                     title="Preview workout"
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>visibility</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>visibility</span>
                   </button>
                   <button
                     onClick={() => onStartSavedWorkout(workout)}
-                    className="flex-1 text-left active:scale-[0.99]"
+                    className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0 hover:bg-emerald-600 transition-colors active:scale-[0.97]"
+                    title="Start workout"
                   >
-                    <div className="font-medium text-slate-900 dark:text-slate-100">{workout.name}</div>
-                    <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                      {getExerciseCount(workout.blocks)} exercises
-                      {workout.estimatedMinutes && ` • ~${workout.estimatedMinutes} min`}
-                    </div>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                    </svg>
                   </button>
-                  <svg className="w-5 h-5 text-slate-300 dark:text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
                 </div>
               ))}
             </div>
@@ -162,16 +193,19 @@ export function WorkoutStartFlow({
         <div>
           <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Start a Timed Activity</h2>
           <div className="grid grid-cols-2 gap-3">
-            {(['walk', 'run', 'trail-run', 'hike'] as CardioType[]).map((type) => (
-              <button
-                key={type}
-                onClick={() => onStartCardio(type)}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all active:scale-[0.98]"
-              >
-                <span className="material-symbols-outlined text-slate-600 dark:text-slate-400" style={{ fontSize: '24px' }}>{CARDIO_ICONS[type]}</span>
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{CARDIO_TYPE_LABELS[type]}</span>
-              </button>
-            ))}
+            {(['walk', 'run', 'trail-run', 'hike'] as CardioType[]).map((type) => {
+              const config = CARDIO_CONFIG[type];
+              return (
+                <button
+                  key={type}
+                  onClick={() => onStartCardio(type)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all active:scale-[0.98]"
+                >
+                  <span className={`material-symbols-outlined ${config.color}`} style={{ fontSize: '24px' }}>{config.icon}</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{CARDIO_TYPE_LABELS[type]}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

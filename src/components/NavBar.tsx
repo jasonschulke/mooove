@@ -8,59 +8,39 @@ interface NavBarProps {
   workoutProgress?: number;
 }
 
+// Static dumbbell icon (no workout active)
 function DumbbellIcon() {
   return (
-    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.5 6.5v11M17.5 6.5v11M6.5 12h11M4 8v8M20 8v8M2 10v4M22 10v4" />
-    </svg>
+    <span className="material-symbols-outlined text-white" style={{ fontSize: '28px' }}>
+      fitness_center
+    </span>
   );
 }
 
+// Animated strength icon
 function LiftingIcon() {
   return (
-    <svg className="w-7 h-7 text-white animate-lift" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.5 6.5v11M17.5 6.5v11M6.5 12h11M4 8v8M20 8v8M2 10v4M22 10v4" />
-    </svg>
+    <span className="material-symbols-outlined text-white animate-lift" style={{ fontSize: '28px' }}>
+      exercise
+    </span>
   );
 }
 
+// Animated running icon
 function RunningIcon() {
-  // Dynamic running pose - centered, with motion lines
   return (
-    <svg className="w-7 h-7 text-white animate-run-bounce" fill="currentColor" viewBox="0 0 24 24">
-      {/* Motion lines */}
-      <path d="M2 8h3M1 12h4M2 16h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.6" />
-      {/* Head */}
-      <circle cx="15" cy="5" r="2.5" />
-      {/* Body - leaning forward */}
-      <path d="M14.5 7.5L12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      {/* Back arm - pumping back */}
-      <path d="M13 9L16.5 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-      {/* Front arm - pumping forward */}
-      <path d="M13 9.5L9 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-      {/* Back leg - extended behind */}
-      <path d="M12 12L15.5 15.5L19 17" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      {/* Front leg - driving forward */}
-      <path d="M12 12L9 16L6 15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
+    <span className="material-symbols-outlined text-white animate-run-bounce" style={{ fontSize: '28px' }}>
+      sprint
+    </span>
   );
 }
 
+// Animated walking icon
 function WalkingIcon() {
-  // Walking pose - centered, upright stride
   return (
-    <svg className="w-7 h-7 text-white animate-walk-bounce" fill="currentColor" viewBox="0 0 24 24">
-      {/* Head */}
-      <circle cx="12" cy="5" r="2.5" />
-      {/* Body */}
-      <path d="M12 7.5V12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-      {/* Arms swinging */}
-      <path d="M12 9L9 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-      <path d="M12 9L15 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-      {/* Legs in stride */}
-      <path d="M12 12L9 17L7 21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <path d="M12 12L15 17L17 21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
+    <span className="material-symbols-outlined text-white animate-walk-bounce" style={{ fontSize: '28px' }}>
+      directions_walk
+    </span>
   );
 }
 

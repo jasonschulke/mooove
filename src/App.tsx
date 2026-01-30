@@ -201,9 +201,6 @@ function AppContent() {
                 handleBuilderStart(savedWorkout.blocks);
               }
             }}
-            onPreviewWorkout={(savedWorkout) => {
-              // For now, just start the workout - preview modal handled in component
-            }}
             onStartCardio={handleStartCardio}
             onManageLibrary={() => setCurrentPage('library')}
           />
